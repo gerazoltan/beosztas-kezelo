@@ -139,3 +139,6 @@ local-samples/
 *.xlsx
 *.xls
 .DS_Store
+playwright-report/
+test-results/
+blob-report/

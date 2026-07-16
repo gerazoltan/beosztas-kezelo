@@ -1,0 +1,126 @@
+import { describe, expect, it } from 'vitest';
+import type { DayEntry, LocalDate } from '../src/domain/types';
+import { interpretSchedule } from '../src/services/shifts';
+import { normalizeMarker } from '../src/utils/normalize';
+
+const legend = { blue12: [], green12: [] };
+
+function entry(
+  day: number,
+  marker: string,
+  options: {
+    month?: number;
+    year?: number;
+    style?: Partial<DayEntry['selectedDiagnostic']>;
+    kind?: DayEntry['kind'];
+  } = {},
+): DayEntry {
+  const date: LocalDate = { year: options.year ?? 2026, month: options.month ?? 8, day };
+  const diagnostic = {
+    address: `C${day + 4}`,
+    rawValue: marker,
+    displayedText: marker,
+    isMerged: false,
+    italic: false,
+    bold: false,
+    ...options.style,
+  };
+  return {
+    date,
+    group: { day, startColumn: 3, endColumn: 4, valid: true },
+    kind: options.kind ?? (marker ? 'single' : 'empty'),
+    marker,
+    normalizedMarker: normalizeMarker(marker),
+    diagnostics: [diagnostic],
+    selectedDiagnostic: diagnostic,
+  };
+}
+
+describe('szolgálatértelmező', () => {
+  it('kék 12-ből 06:00–18:00 szolgálatot készít', () => {
+    const result = interpretSchedule([entry(1, '12', { style: { fillColor: '#C5D9F1' } })], {
+      legend,
+    });
+    expect(result.events[0]).toMatchObject({
+      start: '2026-08-01T06:00:00',
+      end: '2026-08-01T18:00:00',
+      shiftType: 'Nappalos 06–18',
+    });
+  });
+
+  it('zöld, dőlt 12-ből 10:00–22:00 szolgálatot készít', () => {
+    const result = interpretSchedule(
+      [entry(1, '12', { style: { fontColor: '#008000', italic: true } })],
+      { legend },
+    );
+    expect(result.events[0]).toMatchObject({
+      start: '2026-08-01T10:00:00',
+      end: '2026-08-01T22:00:00',
+      shiftType: 'Nappalos 10–22',
+    });
+  });
+
+  it('ismeretlen 12 bizonytalan és nem exportálható', () => {
+    const result = interpretSchedule([entry(1, '12')], { legend });
+    expect(result.events).toHaveLength(0);
+    expect(result.rows[0]?.status).toBe('Bizonytalan');
+  });
+
+  it.each([
+    ['17', '2026-08-01T07:00:00', '2026-08-02T06:55:00', '24 órás szolgálat'],
+    ['5', '2026-08-01T19:00:00', '2026-08-02T07:00:00', 'Éjszakai szolgálat'],
+  ])('%s–7 párból egyetlen eseményt készít', (marker, start, end, shiftType) => {
+    const result = interpretSchedule([entry(1, marker), entry(2, '7')], { legend });
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]).toMatchObject({ start, end, shiftType });
+    expect(result.rows.filter((row) => row.event)).toHaveLength(1);
+  });
+
+  it('KMR-t másnap 01:00-ig értelmez', () => {
+    const result = interpretSchedule([entry(31, 'KMR')], { legend });
+    expect(result.events[0]).toMatchObject({
+      summary: 'KMR',
+      start: '2026-08-31T05:00:00',
+      end: '2026-09-01T01:00:00',
+    });
+  });
+
+  it.each(['7', '17', '5'])('a párosítatlan %s hibás párosítás', (marker) => {
+    const result = interpretSchedule([entry(3, marker)], { legend });
+    expect(result.events).toHaveLength(0);
+    expect(result.rows[0]?.status).toBe('Hibás párosítás');
+  });
+
+  it('kezeli a 17–7 hónapváltást', () => {
+    const current = entry(1, '7', { month: 9 });
+    const previous = entry(31, '17', { month: 8 });
+    const result = interpretSchedule([current], { legend, previous });
+    expect(result.events[0]).toMatchObject({
+      start: '2026-08-31T07:00:00',
+      end: '2026-09-01T06:55:00',
+    });
+  });
+
+  it('kezeli az 5–7 hónapváltást a hónap végéről', () => {
+    const current = entry(30, '5', { month: 9 });
+    const next = entry(1, '7', { month: 10 });
+    const result = interpretSchedule([current], { legend, next });
+    expect(result.events[0]).toMatchObject({
+      start: '2026-09-30T19:00:00',
+      end: '2026-10-01T07:00:00',
+    });
+  });
+
+  it('hiányzó szomszéd hónapnál nem exportál', () => {
+    expect(interpretSchedule([entry(31, '17')], { legend }).events).toHaveLength(0);
+  });
+
+  it.each(['x', 'sz.', 'ÁP', 'TK', 'szabadság', 'betegállomány', 'pihenőnap'])(
+    '%s nem szolgálat',
+    (marker) => {
+      const result = interpretSchedule([entry(1, marker)], { legend });
+      expect(result.events).toHaveLength(0);
+      expect(result.rows[0]?.status).toBe('Kizárva');
+    },
+  );
+});
