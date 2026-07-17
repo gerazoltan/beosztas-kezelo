@@ -95,7 +95,10 @@ describe('Excel parser', () => {
 
   it('a következő hónapot választja, különben dokumentált fallbacket használ', async () => {
     const session = await parseWorkbook(await workbookBuffer(), 'minta.xlsx');
-    expect(chooseDefaultMonth(session.months, new Date(2026, 6, 2)).usedFallback).toBe(false);
+    expect(chooseDefaultMonth(session.months, new Date(2026, 6, 2))).toMatchObject({
+      month: { year: 2026, month: 8, sheetName: 'Augusztus' },
+      usedFallback: false,
+    });
     expect(chooseDefaultMonth(session.months, new Date(2026, 0, 2)).usedFallback).toBe(true);
   });
 

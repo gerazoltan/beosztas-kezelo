@@ -43,6 +43,7 @@ input[type='checkbox'] {
   cursor: pointer;
 }
 button:focus-visible,
+.button:focus-visible,
 select:focus-visible,
 input:focus-visible,
 summary:focus-visible {
@@ -249,13 +250,33 @@ main {
   background: transparent;
   color: var(--green-800);
 }
+.button.tertiary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--green-800);
+  background: var(--green-100);
+  border-color: #aac3b6;
+  text-decoration: none;
+}
+.button.tertiary:hover {
+  color: var(--green-950);
+  background: var(--line);
+  border-color: var(--green-700);
+}
+.external-link-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
 .button-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
-
+.button-row .button.secondary {
+  margin-top: 0;
+}
 .notice {
   border-radius: 0.75rem;
   border: 1px solid;
@@ -408,6 +429,10 @@ tbody tr:last-child td {
   background: #ffe1dc;
   color: #8b322c;
 }
+.status-pending {
+  background: #fff1c9;
+  color: #76500e;
+}
 .diagnostics {
   margin-top: 0.45rem;
   color: #56645d;
@@ -429,7 +454,6 @@ tbody tr:last-child td {
   margin: 0;
   overflow-wrap: anywhere;
 }
-
 .export-panel {
   background: var(--cream);
 }
@@ -441,6 +465,69 @@ tbody tr:last-child td {
   display: grid;
   gap: 1rem;
   max-width: 600px;
+}
+.google-upload-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+.upload-result {
+  max-width: 680px;
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid;
+  border-radius: 0.85rem;
+}
+.upload-result h3 {
+  margin: 0 0 0.7rem;
+  font:
+    700 1.25rem Georgia,
+    serif;
+}
+.upload-result-success {
+  color: var(--green-950);
+  background: #eaf7ef;
+  border-color: #acd3bb;
+}
+.upload-result-warning {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: #ead7ad;
+}
+.upload-result-error {
+  color: var(--error);
+  background: var(--error-bg);
+  border-color: #ecc2bf;
+}
+.upload-result code {
+  display: block;
+  margin: 0.5rem 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.upload-summary {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.9rem;
+}
+.upload-summary p {
+  margin: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 footer {
   border-top: 1px solid var(--line);

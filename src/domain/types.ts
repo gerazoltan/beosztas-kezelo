@@ -96,12 +96,17 @@ export interface LocalDate {
 export type ShiftType =
   'Nappalos 06–18' | 'Nappalos 10–22' | '24 órás szolgálat' | 'Éjszakai szolgálat' | 'KMR';
 
+export interface EventTimeRange {
+  start: string;
+  end: string;
+}
+
 export interface CalendarEvent {
   id: string;
   summary: 'OMSZ' | 'KMR';
   shiftType: ShiftType;
-  start: string;
-  end: string;
+  shiftTime: EventTimeRange;
+  calendarTime: EventTimeRange;
   timeZone: 'Europe/Budapest';
 }
 
@@ -111,20 +116,29 @@ export type ReviewStatus =
   | 'Kizárva'
   | 'Bizonytalan'
   | 'Hibás párosítás'
+  | 'Létrehozás folyamatban'
   | 'Már szerepel a naptárban'
   | 'Létrehozva'
   | 'Sikertelen';
+
+export interface GoogleEventState {
+  status: Extract<
+    ReviewStatus,
+    'Létrehozás folyamatban' | 'Már szerepel a naptárban' | 'Létrehozva' | 'Sikertelen'
+  >;
+  message: string;
+  technicalDetails?: string;
+}
 
 export interface ReviewRow {
   id: string;
   date: LocalDate;
   marker: string;
   shiftType?: ShiftType;
-  start?: string;
-  end?: string;
   summary?: 'OMSZ' | 'KMR';
   status: ReviewStatus;
   note: string;
+  technicalNote?: string;
   diagnostics: CellDiagnostic[];
   event?: CalendarEvent;
 }

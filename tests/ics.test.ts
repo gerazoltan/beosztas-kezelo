@@ -8,8 +8,8 @@ function calendarEvent(id: string, summary: 'OMSZ' | 'KMR' = 'OMSZ'): CalendarEv
     id,
     summary,
     shiftType: summary === 'KMR' ? 'KMR' : 'Nappalos 06–18',
-    start: '2026-08-10T06:00:00',
-    end: '2026-08-10T18:00:00',
+    shiftTime: { start: '2026-08-10T06:00:00', end: '2026-08-10T18:00:00' },
+    calendarTime: { start: '2026-08-10T06:00:00', end: '2026-08-10T18:00:00' },
     timeZone: 'Europe/Budapest',
   };
 }
@@ -28,13 +28,57 @@ describe('ICS-generátor', () => {
     const first = calendarEvent('a');
     const second = {
       ...calendarEvent('b', 'KMR'),
-      start: '2026-08-11T05:00:00',
-      end: '2026-08-12T01:00:00',
+      shiftTime: { start: '2026-08-11T05:00:00', end: '2026-08-12T01:00:00' },
+      calendarTime: { start: '2026-08-11T05:00:00', end: '2026-08-12T01:00:00' },
     };
     const content = buildIcs([first, second]);
     expect(content.match(/BEGIN:VEVENT/g)).toHaveLength(2);
     expect(stableUid(first)).toBe(stableUid(first));
     expect(stableUid(first)).not.toBe(stableUid(second));
+  });
+
+  it('a 17–7 szolgálatot 07:00-tól másnap 06:59-ig exportálja', () => {
+    const diagnostic = {
+      address: 'G5',
+      rawValue: '17',
+      displayedText: '17',
+      isMerged: false,
+      italic: false,
+      bold: false,
+    };
+    const result = interpretSchedule(
+      [
+        {
+          date: { year: 2026, month: 8, day: 3 },
+          group: { day: 3, startColumn: 7, endColumn: 8, valid: true },
+          kind: 'single',
+          marker: '17',
+          normalizedMarker: '17',
+          diagnostics: [diagnostic],
+          selectedDiagnostic: diagnostic,
+        },
+        {
+          date: { year: 2026, month: 8, day: 4 },
+          group: { day: 4, startColumn: 9, endColumn: 10, valid: true },
+          kind: 'single',
+          marker: '7',
+          normalizedMarker: '7',
+          diagnostics: [{ ...diagnostic, address: 'I5', rawValue: '7', displayedText: '7' }],
+          selectedDiagnostic: {
+            ...diagnostic,
+            address: 'I5',
+            rawValue: '7',
+            displayedText: '7',
+          },
+        },
+      ],
+      { legend: { blue12: [], green12: [] } },
+    );
+
+    const content = buildIcs(result.events);
+    expect(content).toContain('DTSTART;TZID=Europe/Budapest:20260803T070000');
+    expect(content).toContain('DTEND;TZID=Europe/Budapest:20260804T065900');
+    expect(content).not.toContain('DTEND;TZID=Europe/Budapest:20260804T070000');
   });
 
   it('escape-eli a különleges karaktereket és UTF-8 bájthosszon hajtogat', () => {

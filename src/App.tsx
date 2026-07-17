@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
-import type { MonthSheet, ScheduleResult, WorkbookSession } from './domain/types';
-import { HUNGARIAN_MONTHS } from './domain/types';
+import { useMemo, useRef, useState } from 'react';
+import type { GoogleEventState, ScheduleResult, WorkbookSession } from './domain/types';
 import { AppError, toAppError } from './domain/errors';
 import { readEmployeeScheduleEntries } from './excel/dayEntries';
 import { buildIcs, downloadIcs, icsFileName } from './services/ics';
 import type { GoogleWriteResult } from './services/googleCalendar';
 import { interpretSchedule } from './services/shifts';
+import { monthOptionLabel, monthOptionValue } from './utils/monthOptions';
+import { isGoogleSelectionLocked, isGoogleUploadComplete } from './utils/googleUpload';
 import { ErrorNotice } from './components/ErrorNotice';
 import { FileUpload } from './components/FileUpload';
 import { GooglePanel } from './components/GooglePanel';
@@ -14,11 +15,8 @@ import { Stepper } from './components/Stepper';
 import { SummaryCards } from './components/SummaryCards';
 import './styles.css';
 
-function monthKey(month: MonthSheet): string {
-  return `${month.year}-${month.month}-${month.sheetName}`;
-}
-
 export default function App() {
+  const uploadSectionRef = useRef<HTMLElement>(null);
   const [session, setSession] = useState<WorkbookSession>();
   const [selectedMonthKey, setSelectedMonthKey] = useState('');
   const [employeeName, setEmployeeName] = useState('');
@@ -28,14 +26,28 @@ export default function App() {
   const [error, setError] = useState<AppError>();
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [googleEventStates, setGoogleEventStates] = useState<Map<string, GoogleEventState>>(
+    new Map(),
+  );
+  const [googleUploadResetKey, setGoogleUploadResetKey] = useState(0);
 
-  const selectedMonth = session?.months.find((month) => monthKey(month) === selectedMonthKey);
+  const selectedMonth = session?.months.find(
+    (month) => monthOptionValue(month) === selectedMonthKey,
+  );
   const employee = selectedMonth?.employees.find((item) => item.normalizedName === employeeName);
   const selectedCalendarEvents = useMemo(
-    () => result?.events.filter((event) => selectedEvents.has(event.id)) ?? [],
-    [result, selectedEvents],
+    () =>
+      result?.events.filter(
+        (event) =>
+          selectedEvents.has(event.id) && !isGoogleUploadComplete(googleEventStates.get(event.id)),
+      ) ?? [],
+    [googleEventStates, result, selectedEvents],
   );
   const currentStep = result ? 6 : employeeName ? 4 : selectedMonth ? 2 : session ? 1 : 1;
+  const resetGoogleUpload = () => {
+    setGoogleEventStates(new Map());
+    setGoogleUploadResetKey((current) => current + 1);
+  };
 
   const resetAfterFile = () => {
     setEmployeeName('');
@@ -44,6 +56,7 @@ export default function App() {
     setSelectedEvents(new Set());
     setNotice('');
     setError(undefined);
+    resetGoogleUpload();
   };
 
   const handleFile = async (file: File) => {
@@ -56,7 +69,7 @@ export default function App() {
       const parsed = await parseWorkbook(await file.arrayBuffer(), file.name);
       const defaultSelection = chooseDefaultMonth(parsed.months);
       setSession(parsed);
-      setSelectedMonthKey(monthKey(defaultSelection.month));
+      setSelectedMonthKey(monthOptionValue(defaultSelection.month));
       if (defaultSelection.usedFallback) {
         setNotice(
           'A következő naptári hónap nem található; az első kitöltött havi lapot választottuk ki.',
@@ -76,6 +89,7 @@ export default function App() {
     setResult(undefined);
     setSelectedEvents(new Set());
     setError(undefined);
+    resetGoogleUpload();
   };
 
   const selectEmployee = (value: string) => {
@@ -85,10 +99,12 @@ export default function App() {
     setResult(undefined);
     setSelectedEvents(new Set());
     setError(undefined);
+    resetGoogleUpload();
   };
 
   const processSchedule = () => {
     setError(undefined);
+    resetGoogleUpload();
     if (!session || !selectedMonth || !employeeName) {
       setError(new AppError('EMPLOYEE_NOT_FOUND'));
       return;
@@ -119,6 +135,7 @@ export default function App() {
   };
 
   const toggleEvent = (id: string) => {
+    if (isGoogleSelectionLocked(googleEventStates.get(id))) return;
     setSelectedEvents((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -129,7 +146,13 @@ export default function App() {
 
   const selectAll = (checked: boolean) => {
     setSelectedEvents(
-      checked && result ? new Set(result.events.map((event) => event.id)) : new Set(),
+      checked && result
+        ? new Set(
+            result.events
+              .filter((event) => !isGoogleSelectionLocked(googleEventStates.get(event.id)))
+              .map((event) => event.id),
+          )
+        : new Set(),
     );
   };
 
@@ -141,19 +164,55 @@ export default function App() {
     );
   };
 
-  const applyGoogleResults = (googleResults: GoogleWriteResult[]) => {
-    const statuses = new Map(googleResults.map((item) => [item.eventId, item]));
-    setResult((current) =>
-      current
-        ? {
-            ...current,
-            rows: current.rows.map((row) => {
-              const status = row.event ? statuses.get(row.event.id) : undefined;
-              return status ? { ...row, status: status.status, note: status.message } : row;
-            }),
-          }
-        : current,
-    );
+  const markGoogleEventStarted = (eventId: string) => {
+    setGoogleEventStates((current) => {
+      const next = new Map(current);
+      next.set(eventId, {
+        status: 'Létrehozás folyamatban',
+        message: 'A Google Naptár ellenőrzése és az esemény létrehozása folyamatban van.',
+      });
+      return next;
+    });
+  };
+
+  const applyGoogleResult = (googleResult: GoogleWriteResult) => {
+    setGoogleEventStates((current) => {
+      const next = new Map(current);
+      next.set(googleResult.eventId, googleResult);
+      return next;
+    });
+    if (
+      googleResult.status === 'Létrehozva' ||
+      googleResult.status === 'Már szerepel a naptárban'
+    ) {
+      setSelectedEvents((current) => {
+        const next = new Set(current);
+        next.delete(googleResult.eventId);
+        return next;
+      });
+    }
+  };
+
+  const resetAfterCalendarChange = () => {
+    setGoogleEventStates(new Map());
+    setSelectedEvents(new Set(result?.events.map((event) => event.id) ?? []));
+  };
+
+  const startNewSchedule = () => {
+    setSession(undefined);
+    setSelectedMonthKey('');
+    setEmployeeName('');
+    setEmployeeRow(undefined);
+    setResult(undefined);
+    setSelectedEvents(new Set());
+    setError(undefined);
+    setNotice('');
+    setBusy(false);
+    resetGoogleUpload();
+    uploadSectionRef.current?.scrollIntoView?.({
+      behavior: 'smooth',
+      block: 'start',
+    });
   };
 
   return (
@@ -172,6 +231,7 @@ export default function App() {
       <main>
         <Stepper current={currentStep} />
         <FileUpload
+          sectionRef={uploadSectionRef}
           fileName={session?.fileName}
           disabled={busy}
           onFile={(file) => void handleFile(file)}
@@ -207,8 +267,8 @@ export default function App() {
                   onChange={(event) => selectMonth(event.target.value)}
                 >
                   {session.months.map((month) => (
-                    <option key={monthKey(month)} value={monthKey(month)}>
-                      {month.year}. {HUNGARIAN_MONTHS[month.month - 1]} — {month.sheetName}
+                    <option key={monthOptionValue(month)} value={monthOptionValue(month)}>
+                      {monthOptionLabel(month)}
                     </option>
                   ))}
                 </select>
@@ -274,6 +334,7 @@ export default function App() {
             <ReviewTable
               rows={result.rows}
               selected={selectedEvents}
+              googleStates={googleEventStates}
               onToggle={toggleEvent}
               onSelectAll={selectAll}
             />
@@ -295,9 +356,17 @@ export default function App() {
                 ICS letöltése
               </button>
             </section>
-            <GooglePanel events={selectedCalendarEvents} onResults={applyGoogleResults} />
           </>
         )}
+        <GooglePanel
+          visible={Boolean(result)}
+          events={selectedCalendarEvents}
+          resetKey={googleUploadResetKey}
+          onEventStart={markGoogleEventStarted}
+          onResult={applyGoogleResult}
+          onCalendarChange={resetAfterCalendarChange}
+          onNewSchedule={startNewSchedule}
+        />
       </main>
       <footer>Az alkalmazás nem küldi el és nem tárolja a feltöltött beosztást.</footer>
     </div>

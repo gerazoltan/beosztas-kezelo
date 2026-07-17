@@ -18,7 +18,7 @@ export function formatIcsLocal(value: string): string {
 
 export function stableUid(item: CalendarEvent): string {
   let hash = 0x811c9dc5;
-  const value = `${item.summary}|${item.start}|${item.end}|${item.shiftType}`;
+  const value = `${item.summary}|${item.calendarTime.start}|${item.calendarTime.end}|${item.shiftType}`;
   for (const character of value) {
     hash ^= character.codePointAt(0) ?? 0;
     hash = Math.imul(hash, 0x01000193);
@@ -87,8 +87,8 @@ export function buildIcs(events: CalendarEvent[], generatedAt = new Date()): str
       'BEGIN:VEVENT',
       `UID:${stableUid(item)}`,
       `DTSTAMP:${dtstamp(generatedAt)}`,
-      `DTSTART;TZID=Europe/Budapest:${formatIcsLocal(item.start)}`,
-      `DTEND;TZID=Europe/Budapest:${formatIcsLocal(item.end)}`,
+      `DTSTART;TZID=Europe/Budapest:${formatIcsLocal(item.calendarTime.start)}`,
+      `DTEND;TZID=Europe/Budapest:${formatIcsLocal(item.calendarTime.end)}`,
       `SUMMARY:${escapeIcsText(item.summary)}`,
       'END:VEVENT',
     );

@@ -14,6 +14,9 @@ export type AppErrorCode =
   | 'INVALID_DAY_COUNT'
   | 'GOOGLE_NOT_CONFIGURED'
   | 'GOOGLE_ACCESS_DENIED'
+  | 'GOOGLE_TOKEN_EXPIRED'
+  | 'GOOGLE_NETWORK_ERROR'
+  | 'GOOGLE_CALENDAR_NOT_WRITABLE'
   | 'GOOGLE_API_ERROR';
 
 const MESSAGES: Record<AppErrorCode, string> = {
@@ -32,7 +35,10 @@ const MESSAGES: Record<AppErrorCode, string> = {
   INVALID_DAY_COUNT: 'A munkalap a hónaphoz nem tartozó naptári napot is tartalmaz.',
   GOOGLE_NOT_CONFIGURED: 'A Google Naptár-integráció nincs konfigurálva.',
   GOOGLE_ACCESS_DENIED: 'A Google-hozzáférés nem engedélyezett.',
-  GOOGLE_API_ERROR: 'A Google Naptár elérése hálózati vagy API-hiba miatt sikertelen.',
+  GOOGLE_TOKEN_EXPIRED: 'A Google-bejelentkezés lejárt. Jelentkezz be újra a folytatáshoz.',
+  GOOGLE_NETWORK_ERROR: 'Hálózati hiba miatt nem érhető el a Google Naptár.',
+  GOOGLE_CALENDAR_NOT_WRITABLE: 'A kiválasztott Google Naptár nem írható.',
+  GOOGLE_API_ERROR: 'A Google Naptár API hibát jelzett.',
 };
 
 export class AppError extends Error {

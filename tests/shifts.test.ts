@@ -42,9 +42,9 @@ describe('szolgálatértelmező', () => {
       legend,
     });
     expect(result.events[0]).toMatchObject({
-      start: '2026-08-01T06:00:00',
-      end: '2026-08-01T18:00:00',
       shiftType: 'Nappalos 06–18',
+      shiftTime: { start: '2026-08-01T06:00:00', end: '2026-08-01T18:00:00' },
+      calendarTime: { start: '2026-08-01T06:00:00', end: '2026-08-01T18:00:00' },
     });
   });
 
@@ -54,9 +54,9 @@ describe('szolgálatértelmező', () => {
       { legend },
     );
     expect(result.events[0]).toMatchObject({
-      start: '2026-08-01T10:00:00',
-      end: '2026-08-01T22:00:00',
       shiftType: 'Nappalos 10–22',
+      shiftTime: { start: '2026-08-01T10:00:00', end: '2026-08-01T22:00:00' },
+      calendarTime: { start: '2026-08-01T10:00:00', end: '2026-08-01T22:00:00' },
     });
   });
 
@@ -66,22 +66,36 @@ describe('szolgálatértelmező', () => {
     expect(result.rows[0]?.status).toBe('Bizonytalan');
   });
 
-  it.each([
-    ['17', '2026-08-01T07:00:00', '2026-08-02T06:55:00', '24 órás szolgálat'],
-    ['5', '2026-08-01T19:00:00', '2026-08-02T07:00:00', 'Éjszakai szolgálat'],
-  ])('%s–7 párból egyetlen eseményt készít', (marker, start, end, shiftType) => {
-    const result = interpretSchedule([entry(1, marker), entry(2, '7')], { legend });
+  it('17–7 esetén a listában 24 órát, a naptárban 06:59-es befejezést használ', () => {
+    const result = interpretSchedule([entry(1, '17'), entry(2, '7')], { legend });
     expect(result.events).toHaveLength(1);
-    expect(result.events[0]).toMatchObject({ start, end, shiftType });
+    expect(result.events[0]).toMatchObject({
+      shiftType: '24 órás szolgálat',
+      shiftTime: { start: '2026-08-01T07:00:00', end: '2026-08-02T07:00:00' },
+      calendarTime: { start: '2026-08-01T07:00:00', end: '2026-08-02T06:59:00' },
+    });
     expect(result.rows.filter((row) => row.event)).toHaveLength(1);
+    expect(result.rows.find((row) => row.event)?.technicalNote).toBe(
+      'A naptáresemény befejezése 06:59 a jobb naptári elkülönítés érdekében.',
+    );
+  });
+
+  it('az 5–7 éjszakai szolgálat listában és naptárban is másnap 07:00-ig tart', () => {
+    const result = interpretSchedule([entry(1, '5'), entry(2, '7')], { legend });
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]).toMatchObject({
+      shiftType: 'Éjszakai szolgálat',
+      shiftTime: { start: '2026-08-01T19:00:00', end: '2026-08-02T07:00:00' },
+      calendarTime: { start: '2026-08-01T19:00:00', end: '2026-08-02T07:00:00' },
+    });
   });
 
   it('KMR-t másnap 01:00-ig értelmez', () => {
     const result = interpretSchedule([entry(31, 'KMR')], { legend });
     expect(result.events[0]).toMatchObject({
       summary: 'KMR',
-      start: '2026-08-31T05:00:00',
-      end: '2026-09-01T01:00:00',
+      shiftTime: { start: '2026-08-31T05:00:00', end: '2026-09-01T01:00:00' },
+      calendarTime: { start: '2026-08-31T05:00:00', end: '2026-09-01T01:00:00' },
     });
   });
 
@@ -96,8 +110,8 @@ describe('szolgálatértelmező', () => {
     const previous = entry(31, '17', { month: 8 });
     const result = interpretSchedule([current], { legend, previous });
     expect(result.events[0]).toMatchObject({
-      start: '2026-08-31T07:00:00',
-      end: '2026-09-01T06:55:00',
+      shiftTime: { start: '2026-08-31T07:00:00', end: '2026-09-01T07:00:00' },
+      calendarTime: { start: '2026-08-31T07:00:00', end: '2026-09-01T06:59:00' },
     });
   });
 
@@ -106,8 +120,8 @@ describe('szolgálatértelmező', () => {
     const next = entry(1, '7', { month: 10 });
     const result = interpretSchedule([current], { legend, next });
     expect(result.events[0]).toMatchObject({
-      start: '2026-09-30T19:00:00',
-      end: '2026-10-01T07:00:00',
+      shiftTime: { start: '2026-09-30T19:00:00', end: '2026-10-01T07:00:00' },
+      calendarTime: { start: '2026-09-30T19:00:00', end: '2026-10-01T07:00:00' },
     });
   });
 

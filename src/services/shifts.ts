@@ -1,6 +1,7 @@
 import type {
   CalendarEvent,
   DayEntry,
+  EventTimeRange,
   LegendStyles,
   ResolvedStyle,
   ReviewRow,
@@ -42,17 +43,21 @@ function stableHash(value: string): string {
 function event(
   summary: 'OMSZ' | 'KMR',
   shiftType: ShiftType,
-  start: string,
-  end: string,
+  shiftTime: EventTimeRange,
+  calendarTime: EventTimeRange = shiftTime,
 ): CalendarEvent {
   return {
-    id: stableHash(`${summary}|${shiftType}|${start}|${end}`),
+    id: stableHash(`${summary}|${shiftType}|${calendarTime.start}|${calendarTime.end}`),
     summary,
     shiftType,
-    start,
-    end,
+    shiftTime,
+    calendarTime,
     timeZone: 'Europe/Budapest',
   };
+}
+
+function timeRange(start: string, end: string): EventTimeRange {
+  return { start, end };
 }
 
 function sameStyle(first: ResolvedStyle, second: ResolvedStyle): boolean {
@@ -81,11 +86,13 @@ function rowForEvent(entry: DayEntry, created: CalendarEvent, note: string): Rev
     date: entry.date,
     marker: entry.marker,
     shiftType: created.shiftType,
-    start: created.start,
-    end: created.end,
     summary: created.summary,
     status: 'Exportálható',
     note,
+    technicalNote:
+      created.shiftType === '24 órás szolgálat'
+        ? 'A naptáresemény befejezése 06:59 a jobb naptári elkülönítés érdekében.'
+        : undefined,
     diagnostics: entry.diagnostics,
     event: created,
   };
@@ -112,16 +119,15 @@ function pairedEvent(startEntry: DayEntry, endEntry: DayEntry): CalendarEvent | 
     return event(
       'OMSZ',
       '24 órás szolgálat',
-      localDateTime(startEntry.date, '07:00'),
-      localDateTime(endEntry.date, '06:55'),
+      timeRange(localDateTime(startEntry.date, '07:00'), localDateTime(endEntry.date, '07:00')),
+      timeRange(localDateTime(startEntry.date, '07:00'), localDateTime(endEntry.date, '06:59')),
     );
   }
   if (startEntry.normalizedMarker === '5') {
     return event(
       'OMSZ',
       'Éjszakai szolgálat',
-      localDateTime(startEntry.date, '19:00'),
-      localDateTime(endEntry.date, '07:00'),
+      timeRange(localDateTime(startEntry.date, '19:00'), localDateTime(endEntry.date, '07:00')),
     );
   }
   return undefined;
@@ -171,8 +177,10 @@ export function interpretSchedule(
       const created = event(
         'OMSZ',
         isGreenTwelve ? 'Nappalos 10–22' : 'Nappalos 06–18',
-        localDateTime(entry.date, isGreenTwelve ? '10:00' : '06:00'),
-        localDateTime(entry.date, isGreenTwelve ? '22:00' : '18:00'),
+        timeRange(
+          localDateTime(entry.date, isGreenTwelve ? '10:00' : '06:00'),
+          localDateTime(entry.date, isGreenTwelve ? '22:00' : '18:00'),
+        ),
       );
       events.push(created);
       rows.push(rowForEvent(entry, created, `${isGreenTwelve ? 'Zöld' : 'Kék'} 12 felismerve.`));
@@ -183,8 +191,10 @@ export function interpretSchedule(
       const created = event(
         'KMR',
         'KMR',
-        localDateTime(entry.date, '05:00'),
-        localDateTime(addDays(entry.date, 1), '01:00'),
+        timeRange(
+          localDateTime(entry.date, '05:00'),
+          localDateTime(addDays(entry.date, 1), '01:00'),
+        ),
       );
       events.push(created);
       rows.push(rowForEvent(entry, created, 'Napi KMR-bejegyzés a naptári nap cellacsoportjában.'));

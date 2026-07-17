@@ -1,12 +1,13 @@
-import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type DragEvent, type Ref } from 'react';
 
 interface FileUploadProps {
   fileName?: string;
   disabled?: boolean;
+  sectionRef?: Ref<HTMLElement>;
   onFile: (file: File) => void;
 }
 
-export function FileUpload({ fileName, disabled, onFile }: FileUploadProps) {
+export function FileUpload({ fileName, disabled, sectionRef, onFile }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -24,7 +25,7 @@ export function FileUpload({ fileName, disabled, onFile }: FileUploadProps) {
   };
 
   return (
-    <section className="panel" aria-labelledby="upload-heading">
+    <section ref={sectionRef} className="panel" aria-labelledby="upload-heading">
       <div className="section-heading">
         <span className="eyebrow">1. lépés</span>
         <h2 id="upload-heading">Excel-fájl kiválasztása</h2>

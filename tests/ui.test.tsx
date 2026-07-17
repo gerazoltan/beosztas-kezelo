@@ -1,10 +1,18 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { asFile, workbookBuffer } from './fixtures/syntheticWorkbook';
 
 describe('felhasználói felület', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', '');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('megjeleníti az adatvédelmi tájékoztatást és a kikapcsolt Google-integrációt', () => {
     render(<App />);
     expect(screen.getByText(/A fájl feldolgozása helyben/)).toBeInTheDocument();
@@ -34,11 +42,23 @@ describe('felhasználói felület', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     render(<App />);
     await user.upload(screen.getByTestId('file-input'), asFile(await workbookBuffer()));
-    expect(await screen.findByRole('option', { name: /2026\. augusztus/ })).toBeInTheDocument();
+    const monthOption = await screen.findByRole('option', { name: '2026. augusztus' });
+    expect(monthOption).toBeInTheDocument();
+    expect(monthOption.textContent?.match(/augusztus/gu)).toHaveLength(1);
+    expect(screen.getByLabelText<HTMLSelectElement>('Hónap')).toHaveValue('2026-8-Augusztus');
     await user.selectOptions(screen.getByLabelText('Dolgozó'), 'teszt elek');
     await user.click(screen.getByRole('button', { name: 'Beosztás feldolgozása' }));
-    expect(await screen.findByText('Nappalos 06–18')).toBeInTheDocument();
-    expect(screen.getByText('Nappalos 10–22')).toBeInTheDocument();
+    const reviewTable = await screen.findByRole('table');
+    expect(within(reviewTable).getByText('Nappalos 06–18')).toBeInTheDocument();
+    expect(within(reviewTable).getByText('Nappalos 10–22')).toBeInTheDocument();
+    const twentyFourHourRow = within(reviewTable).getByText('24 órás szolgálat').closest('tr');
+    if (!twentyFourHourRow) throw new Error('Hiányzó 24 órás szolgálati sor.');
+    expect(within(twentyFourHourRow).getAllByText('07:00')).toHaveLength(2);
+    expect(
+      within(twentyFourHourRow).getByText(
+        'A naptáresemény befejezése 06:59 a jobb naptári elkülönítés érdekében.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.getAllByText('Hibás párosítás').length).toBeGreaterThan(0);
     const exportButton = screen.getByRole('button', { name: 'ICS letöltése' });
     expect(exportButton).toBeEnabled();
