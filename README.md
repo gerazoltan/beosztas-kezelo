@@ -72,7 +72,7 @@ Google nélkül az ICS-export teljesen működik. A közvetlen integrációhoz:
 1. Google Cloud projektben engedélyezd a **Google Calendar API**-t.
 2. Állítsd be az OAuth consent screent és hozz létre **Web application** típusú OAuth client ID-t. Client secret nem kell és nem kerülhet a repositoryba.
 3. Helyi fejlesztéshez add az authorized JavaScript origins listához a tényleges Vite origint, például `http://localhost:5173`.
-4. GitHub Pageshez add hozzá: `https://<felhasználó>.github.io`. A Google Identity Services token flow popupot használ; külön redirect URI-t ez az alkalmazás nem használ.
+4. GitHub Pageshez add hozzá: `https://beosztas-kezelo.github.io/`. A Google Identity Services token flow popupot használ; külön redirect URI-t ez az alkalmazás nem használ.
 5. Helyben készíts `.env.local` fájlt:
 
    ```text
@@ -85,7 +85,7 @@ Az alkalmazás csak a Calendar eseményírási és naptárlista-olvasási scope-
 
 ## GitHub Pages telepítés
 
-A Vite base útvonal `/beosztas-kezelo/`. A `.github/workflows/deploy-pages.yml` minden `main` pushnál futtatja a lintet, typechecket, unit/integrációs és Chromium E2E teszteket, majd a production buildet. Csak sikeres `verify` job után telepít.
+A Vite base útvonala `/`, mert a szervezeti GitHub Pages főoldal a [https://beosztas-kezelo.github.io/](https://beosztas-kezelo.github.io/) gyökércímen fut. A repository: [beosztas-kezelo/beosztas-kezelo.github.io](https://github.com/beosztas-kezelo/beosztas-kezelo.github.io). A `.github/workflows/deploy-pages.yml` minden `main` pushnál futtatja a lintet, typechecket, unit/integrációs és Chromium E2E teszteket, majd a production buildet. Csak sikeres `verify` job után telepít.
 
 GitHubon a **Settings → Pages → Build and deployment → Source** értéke legyen **GitHub Actions**. A workflow kézzel is indítható az Actions felületen.
 
