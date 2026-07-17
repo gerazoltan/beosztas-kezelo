@@ -17,7 +17,16 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
     steps:
+      - name: Google Client ID ellenőrzése
+        run: |
+          if [ -z "$VITE_GOOGLE_CLIENT_ID" ]; then
+            echo "::error::A VITE_GOOGLE_CLIENT_ID repository variable nincs beállítva."
+            exit 1
+          fi
+
       - name: Forráskód letöltése
         uses: actions/checkout@v4
 
@@ -47,8 +56,6 @@ jobs:
 
       - name: Production build
         run: npm run build
-        env:
-          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
 
       - name: Pages artifact előkészítése
         uses: actions/configure-pages@v5
