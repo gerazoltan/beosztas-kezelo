@@ -1,8 +1,10 @@
+import type { Ref } from 'react';
 import type { GoogleEventState, ReviewRow } from '../domain/types';
 import { formatHungarianDate, weekdayHungarian } from '../services/dates';
 import { isGoogleSelectionLocked } from '../utils/googleUpload';
 
 interface ReviewTableProps {
+  sectionRef?: Ref<HTMLElement>;
   rows: ReviewRow[];
   selected: Set<string>;
   googleStates: ReadonlyMap<string, GoogleEventState>;
@@ -15,6 +17,7 @@ function time(value?: string): string {
 }
 
 export function ReviewTable({
+  sectionRef,
   rows,
   selected,
   googleStates,
@@ -28,7 +31,11 @@ export function ReviewTable({
     exportable.length > 0 && exportable.every((row) => selected.has(row.event?.id ?? ''));
 
   return (
-    <section className="panel review-panel" aria-labelledby="review-heading">
+    <section
+      ref={sectionRef}
+      className="panel review-panel workflow-section"
+      aria-labelledby="review-heading"
+    >
       <div className="section-heading review-title-row">
         <div>
           <span className="eyebrow">5. lépés</span>

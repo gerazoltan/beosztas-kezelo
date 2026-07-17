@@ -71,6 +71,10 @@ function visibleEventRow(page: Page, eventName: string) {
   return page.locator('tbody tr').filter({ hasText: eventName });
 }
 
+function workflowStep(page: Page, stepId: string) {
+  return page.locator(`[data-step-id="${stepId}"]`);
+}
+
 async function installGoogleIdentity(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const browserWindow = window as GoogleIdentityTestWindow;
@@ -139,6 +143,8 @@ test('teljes helyi ICS-folyamat', async ({ page }) => {
   await page.goto('.');
   await expect(page.getByRole('heading', { name: 'Beosztáskezelő' })).toBeVisible();
   await expect(page.getByText(/A fájl feldolgozása helyben/)).toBeVisible();
+  await expect(workflowStep(page, 'file')).toHaveAttribute('data-state', 'current');
+  await expect(workflowStep(page, 'month')).toBeDisabled();
   await page.getByTestId('file-input').setInputFiles({
     name: 'anonim-minta.xlsx',
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -147,11 +153,18 @@ test('teljes helyi ICS-folyamat', async ({ page }) => {
   const selectedMonth = page.getByLabel('Hónap').locator('option:checked');
   await expect(selectedMonth).toHaveText('2026. augusztus');
   expect((await selectedMonth.textContent())?.match(/augusztus/gu)).toHaveLength(1);
+  await expect(workflowStep(page, 'file')).toHaveAttribute('data-state', 'complete');
+  await expect(workflowStep(page, 'month')).toHaveAttribute('data-state', 'complete');
+  await expect(workflowStep(page, 'employee')).toHaveAttribute('data-state', 'current');
   await page.getByLabel('Dolgozó').selectOption('teszt elek');
+  await expect(workflowStep(page, 'processing')).toHaveAttribute('data-state', 'current');
   await processScheduleButton(page).click();
   await expect(visibleShiftType(page, 'Nappalos 06–18')).toBeVisible();
+  await expect(workflowStep(page, 'review')).toHaveAttribute('data-state', 'complete');
+  await expect(workflowStep(page, 'export')).toHaveAttribute('data-state', 'current');
   const [download] = await Promise.all([page.waitForEvent('download'), icsButton(page).click()]);
   expect(download.suggestedFilename()).toBe('teszt-elek-2026-augusztus.ics');
+  await expect(workflowStep(page, 'export')).toHaveAttribute('data-state', 'complete');
 });
 
 test('a 17–7 szolgálat listában 24 órás, ICS-ben és Google-ben 06:59-ig tart', async ({ page }) => {
@@ -221,6 +234,65 @@ test('mobilnézetben az oldal vízszintes túlcsordulás nélkül megjelenik', a
     () => document.documentElement.scrollWidth <= window.innerWidth + 1,
   );
   expect(overflow).toBe(true);
+  const stepperOverflow = await page.locator('.stepper').evaluate((stepper) => ({
+    clientWidth: stepper.clientWidth,
+    scrollWidth: stepper.scrollWidth,
+  }));
+  expect(stepperOverflow.scrollWidth).toBeGreaterThanOrEqual(stepperOverflow.clientWidth);
+});
+
+test('a folyamatjelző görgetéskor sticky marad, az állapota változatlan, és a felgörgető gomb visszavisz a tetejére', async ({
+  page,
+}) => {
+  await page.goto('.');
+  await expect(page.getByRole('button', { name: 'Vissza az oldal tetejére' })).not.toBeVisible();
+  const initialStates = await page
+    .locator('[data-step-id]')
+    .evaluateAll((steps) => steps.map((step) => step.getAttribute('data-state')));
+  const stepperStyle = await page.locator('.stepper').evaluate((stepper) => {
+    const style = getComputedStyle(stepper);
+    return {
+      position: style.position,
+      zIndex: style.zIndex,
+      backgroundColor: style.backgroundColor,
+      overflowX: style.overflowX,
+    };
+  });
+  expect(stepperStyle).toMatchObject({
+    position: 'sticky',
+    zIndex: '30',
+    overflowX: 'auto',
+  });
+  expect(stepperStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+
+  await page.getByTestId('file-input').setInputFiles({
+    name: 'anonim-minta.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: await syntheticWorkbook(),
+  });
+  await page.getByLabel('Dolgozó').selectOption('teszt elek');
+  await processScheduleButton(page).click();
+  await expect(page.getByRole('heading', { name: 'Ellenőrzés' })).toBeVisible();
+
+  const processedStates = await page
+    .locator('[data-step-id]')
+    .evaluateAll((steps) => steps.map((step) => step.getAttribute('data-state')));
+  expect(processedStates).not.toEqual(initialStates);
+  await page.evaluate(() => window.scrollTo(0, 500));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThanOrEqual(450);
+  await expect(page.getByRole('button', { name: 'Vissza az oldal tetejére' })).toBeVisible();
+  await expect
+    .poll(() => page.locator('.stepper').evaluate((stepper) => stepper.getBoundingClientRect().top))
+    .toBe(0);
+  expect(
+    await page
+      .locator('[data-step-id]')
+      .evaluateAll((steps) => steps.map((step) => step.getAttribute('data-state'))),
+  ).toEqual(processedStates);
+
+  await page.getByRole('button', { name: 'Vissza az oldal tetejére' }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(page.getByRole('button', { name: 'Vissza az oldal tetejére' })).not.toBeVisible();
 });
 
 test('OAuth után natív fetch-csel, Bearer tokennel lekéri az írható naptárakat', async ({
@@ -293,6 +365,7 @@ test('OAuth után natív fetch-csel, Bearer tokennel lekéri az írható naptár
   const visibleReview = page.locator('.table-scroll');
   await expect(visibleReview.getByText(/zöld Basil \(10\) színnel létrehozta/u)).toHaveCount(2);
   await expect(page.getByRole('heading', { name: 'Sikeres naptárfeltöltés' })).toBeVisible();
+  await expect(workflowStep(page, 'export')).toHaveAttribute('data-state', 'complete');
   await expect(
     page.getByRole('button', { name: /kijelölt esemény hozzáadása/u }),
   ).not.toBeVisible();
@@ -449,6 +522,7 @@ test('a másik naptár művelet megtartja az eseményeket, és üres naptárvál
   await expect(page.getByText('Létrehozva', { exact: true })).toHaveCount(0);
   await expect(visibleEventRow(page, 'OMSZ').getByRole('checkbox')).toBeEnabled();
   await expect(visibleEventRow(page, 'KMR').getByRole('checkbox')).toBeEnabled();
+  await expect(workflowStep(page, 'export')).toHaveAttribute('data-state', 'current');
 
   await page.getByLabel('Írható naptár').selectOption('secondary');
   await expect(googleUploadButton(page, 2)).toBeEnabled();
@@ -501,6 +575,7 @@ test('részleges siker után csak a sikertelen eseményt próbálja újra', asyn
   ).toBeVisible();
   await expect(page.getByText('1 esemény létrehozva.')).toBeVisible();
   await expect(page.getByText('1 sikertelen művelet.')).toBeVisible();
+  await expect(workflowStep(page, 'export')).toHaveAttribute('data-state', 'error');
 
   await retryAction(page, 'Csak a sikertelenek újrapróbálása').click();
   await expect(page.getByRole('heading', { name: 'Sikeres naptárfeltöltés' })).toBeVisible();
@@ -539,4 +614,5 @@ test('teljes hiba esetén piros eredménykártyát és újrapróbálást mutat',
   await expect(errorCard.getByText('A Google Naptár API hibát jelzett.')).toBeVisible();
   await expect(retryAction(page, 'Újrapróbálás')).toBeEnabled();
   await expect(errorCard.getByText('Technikai részletek')).toBeVisible();
+  await expect(workflowStep(page, 'export')).toHaveAttribute('data-state', 'error');
 });

@@ -25,7 +25,7 @@ export function FileUpload({ fileName, disabled, sectionRef, onFile }: FileUploa
   };
 
   return (
-    <section ref={sectionRef} className="panel" aria-labelledby="upload-heading">
+    <section ref={sectionRef} className="panel workflow-section" aria-labelledby="upload-heading">
       <div className="section-heading">
         <span className="eyebrow">1. lépés</span>
         <h2 id="upload-heading">Excel-fájl kiválasztása</h2>

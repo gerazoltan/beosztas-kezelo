@@ -6,6 +6,7 @@ export interface SyntheticMonth {
   monthName: string;
   days: number;
   includeInvalid31?: boolean;
+  duplicateEmployee?: boolean;
 }
 
 export async function workbookBuffer(
@@ -21,7 +22,7 @@ export async function workbookBuffer(
       sheet.getCell(4, 3 + (day - 1) * 2).value = day;
     }
     sheet.getCell('B5').value = 'Teszt Elek';
-    sheet.getCell('B7').value = 'Minta Anna';
+    sheet.getCell('B7').value = month.duplicateEmployee ? 'Teszt Elek' : 'Minta Anna';
     sheet.getCell('B9').value = 'Összesen:';
 
     if (month.name === 'Augusztus') {

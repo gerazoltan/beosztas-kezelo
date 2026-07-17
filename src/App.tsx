@@ -7,6 +7,8 @@ import type { GoogleWriteResult } from './services/googleCalendar';
 import { interpretSchedule } from './services/shifts';
 import { monthOptionLabel, monthOptionValue } from './utils/monthOptions';
 import { isGoogleSelectionLocked, isGoogleUploadComplete } from './utils/googleUpload';
+import { deriveWorkflowProgress, type WorkflowStepId } from './utils/workflowProgress';
+import { BackToTopButton } from './components/BackToTopButton';
 import { ErrorNotice } from './components/ErrorNotice';
 import { FileUpload } from './components/FileUpload';
 import { GooglePanel } from './components/GooglePanel';
@@ -17,6 +19,9 @@ import './styles.css';
 
 export default function App() {
   const uploadSectionRef = useRef<HTMLElement>(null);
+  const selectionSectionRef = useRef<HTMLElement>(null);
+  const reviewSectionRef = useRef<HTMLElement>(null);
+  const exportSectionRef = useRef<HTMLElement>(null);
   const [session, setSession] = useState<WorkbookSession>();
   const [selectedMonthKey, setSelectedMonthKey] = useState('');
   const [employeeName, setEmployeeName] = useState('');
@@ -30,6 +35,7 @@ export default function App() {
     new Map(),
   );
   const [googleUploadResetKey, setGoogleUploadResetKey] = useState(0);
+  const [icsExported, setIcsExported] = useState(false);
 
   const selectedMonth = session?.months.find(
     (month) => monthOptionValue(month) === selectedMonthKey,
@@ -43,7 +49,32 @@ export default function App() {
       ) ?? [],
     [googleEventStates, result, selectedEvents],
   );
-  const currentStep = result ? 6 : employeeName ? 4 : selectedMonth ? 2 : session ? 1 : 1;
+  const employeeSelectionComplete = Boolean(
+    employeeName && employee && (employee.rows.length === 1 || employeeRow !== undefined),
+  );
+  const hasSelectedExportableEvent =
+    result?.events.some((event) => selectedEvents.has(event.id)) ?? false;
+  const hasCompletedGoogleEvent =
+    result?.events.some((event) => isGoogleUploadComplete(googleEventStates.get(event.id))) ??
+    false;
+  const googleUploadInProgress = [...googleEventStates.values()].some(
+    (state) => state.status === 'Létrehozás folyamatban',
+  );
+  const googleUploadFailed = [...googleEventStates.values()].some(
+    (state) => state.status === 'Sikertelen',
+  );
+  const workflowSteps = deriveWorkflowProgress({
+    fileLoaded: Boolean(session),
+    monthSelected: Boolean(selectedMonth),
+    employeeSelected: employeeSelectionComplete,
+    resultReady: Boolean(result),
+    hasSelectedExportableEvent,
+    hasCompletedGoogleEvent,
+    googleUploadInProgress,
+    googleUploadFailed,
+    icsExported,
+    errorCode: error?.code,
+  });
   const resetGoogleUpload = () => {
     setGoogleEventStates(new Map());
     setGoogleUploadResetKey((current) => current + 1);
@@ -56,6 +87,7 @@ export default function App() {
     setSelectedEvents(new Set());
     setNotice('');
     setError(undefined);
+    setIcsExported(false);
     resetGoogleUpload();
   };
 
@@ -89,6 +121,7 @@ export default function App() {
     setResult(undefined);
     setSelectedEvents(new Set());
     setError(undefined);
+    setIcsExported(false);
     resetGoogleUpload();
   };
 
@@ -99,11 +132,22 @@ export default function App() {
     setResult(undefined);
     setSelectedEvents(new Set());
     setError(undefined);
+    setIcsExported(false);
+    resetGoogleUpload();
+  };
+
+  const selectEmployeeRow = (row: number | undefined) => {
+    setEmployeeRow(row);
+    setResult(undefined);
+    setSelectedEvents(new Set());
+    setError(undefined);
+    setIcsExported(false);
     resetGoogleUpload();
   };
 
   const processSchedule = () => {
     setError(undefined);
+    setIcsExported(false);
     resetGoogleUpload();
     if (!session || !selectedMonth || !employeeName) {
       setError(new AppError('EMPLOYEE_NOT_FOUND'));
@@ -136,6 +180,7 @@ export default function App() {
 
   const toggleEvent = (id: string) => {
     if (isGoogleSelectionLocked(googleEventStates.get(id))) return;
+    setIcsExported(false);
     setSelectedEvents((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -145,6 +190,7 @@ export default function App() {
   };
 
   const selectAll = (checked: boolean) => {
+    setIcsExported(false);
     setSelectedEvents(
       checked && result
         ? new Set(
@@ -162,6 +208,7 @@ export default function App() {
       buildIcs(selectedCalendarEvents),
       icsFileName(employee.name, selectedMonth.year, selectedMonth.month),
     );
+    setIcsExported(true);
   };
 
   const markGoogleEventStarted = (eventId: string) => {
@@ -196,6 +243,7 @@ export default function App() {
   const resetAfterCalendarChange = () => {
     setGoogleEventStates(new Map());
     setSelectedEvents(new Set(result?.events.map((event) => event.id) ?? []));
+    setIcsExported(false);
   };
 
   const startNewSchedule = () => {
@@ -208,9 +256,26 @@ export default function App() {
     setError(undefined);
     setNotice('');
     setBusy(false);
+    setIcsExported(false);
     resetGoogleUpload();
     uploadSectionRef.current?.scrollIntoView?.({
       behavior: 'smooth',
+      block: 'start',
+    });
+  };
+
+  const navigateWorkflow = (stepId: WorkflowStepId) => {
+    const selectionTarget = selectionSectionRef.current ?? uploadSectionRef.current;
+    const target =
+      stepId === 'file'
+        ? uploadSectionRef.current
+        : stepId === 'month' || stepId === 'employee' || stepId === 'processing'
+          ? selectionTarget
+          : stepId === 'review'
+            ? reviewSectionRef.current
+            : exportSectionRef.current;
+    target?.scrollIntoView({
+      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
       block: 'start',
     });
   };
@@ -229,7 +294,7 @@ export default function App() {
       </header>
 
       <main>
-        <Stepper current={currentStep} />
+        <Stepper steps={workflowSteps} onNavigate={navigateWorkflow} />
         <FileUpload
           sectionRef={uploadSectionRef}
           fileName={session?.fileName}
@@ -254,7 +319,11 @@ export default function App() {
         ))}
 
         {session && (
-          <section className="panel" aria-labelledby="selection-heading">
+          <section
+            ref={selectionSectionRef}
+            className="panel workflow-section"
+            aria-labelledby="selection-heading"
+          >
             <div className="section-heading">
               <span className="eyebrow">2–4. lépés</span>
               <h2 id="selection-heading">Beosztás kiválasztása</h2>
@@ -292,7 +361,7 @@ export default function App() {
                   Sor kézi kiválasztása
                   <select
                     value={employeeRow ?? ''}
-                    onChange={(event) => setEmployeeRow(Number(event.target.value) || undefined)}
+                    onChange={(event) => selectEmployeeRow(Number(event.target.value) || undefined)}
                   >
                     <option value="">Válassz sort…</option>
                     {employee.rows.map((row) => (
@@ -332,13 +401,18 @@ export default function App() {
           <>
             <SummaryCards summary={result.summary} />
             <ReviewTable
+              sectionRef={reviewSectionRef}
               rows={result.rows}
               selected={selectedEvents}
               googleStates={googleEventStates}
               onToggle={toggleEvent}
               onSelectAll={selectAll}
             />
-            <section className="panel export-panel" aria-labelledby="export-heading">
+            <section
+              ref={exportSectionRef}
+              className="panel export-panel workflow-section"
+              aria-labelledby="export-heading"
+            >
               <div>
                 <span className="eyebrow">6. lépés</span>
                 <h2 id="export-heading">Export</h2>
@@ -368,6 +442,7 @@ export default function App() {
           onNewSchedule={startNewSchedule}
         />
       </main>
+      <BackToTopButton />
       <footer>Az alkalmazás nem küldi el és nem tárolja a feltöltött beosztást.</footer>
     </div>
   );
