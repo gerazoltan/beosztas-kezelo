@@ -162,6 +162,7 @@ function styleEquals(first: ResolvedStyle, second: ResolvedStyle): boolean {
     first.fillColor === second.fillColor &&
     first.hasVisibleFill === second.hasVisibleFill &&
     first.fontColor === second.fontColor &&
+    first.underline === second.underline &&
     first.italic === second.italic &&
     first.bold === second.bold
   );

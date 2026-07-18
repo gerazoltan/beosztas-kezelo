@@ -4,7 +4,7 @@ import { readMonthEntries } from '../src/excel/dayEntries';
 import { parseWorkbook } from '../src/excel/workbookParser';
 import { interpretSchedule } from '../src/services/shifts';
 
-async function whiteTwelveWorkbook(): Promise<ArrayBuffer> {
+async function fontBasedTwelveWorkbook(): Promise<ArrayBuffer> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Augusztus');
   sheet.getCell('B2').value = '2026. augusztus';
@@ -34,19 +34,36 @@ async function whiteTwelveWorkbook(): Promise<ArrayBuffer> {
   sheet.getCell(5, 11).fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'FFC5D9F1' },
+    fgColor: { argb: 'FFC6EFCE' },
   };
   sheet.getCell(5, 13).value = 12;
-  sheet.getCell(5, 13).font = { color: { argb: 'FF008000' }, italic: true };
+  sheet.getCell(5, 13).fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFFFF2CC' },
+  };
   sheet.getCell(5, 15).value = 12;
+  sheet.getCell(5, 15).font = { color: { argb: 'FFFF0000' } };
   sheet.getCell(5, 15).fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'FFF4CCCC' },
+    fgColor: { argb: 'FFC6EFCE' },
   };
-  sheet.getCell(5, 17).value = 7;
-  sheet.getCell(5, 19).value = 5;
-  sheet.getCell(5, 21).value = 17;
+  sheet.getCell(5, 17).value = 12;
+  sheet.getCell(5, 17).font = { color: { argb: 'FF0000FF' } };
+  sheet.getCell(5, 17).fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFFFF2CC' },
+  };
+  sheet.getCell(5, 19).value = 12;
+  sheet.getCell(5, 19).font = {
+    color: { argb: 'FF008000' },
+    underline: true,
+    italic: true,
+  };
+  sheet.getCell(5, 21).value = 12;
+  sheet.getCell(5, 21).font = { color: { argb: 'FF008000' } };
   sheet.getCell(5, 23).value = 'x';
   sheet.getCell(5, 25).value = 12;
   sheet.getCell(5, 25).fill = {
@@ -59,79 +76,58 @@ async function whiteTwelveWorkbook(): Promise<ArrayBuffer> {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-describe('fehér vagy kitöltés nélküli 12 integrációja', () => {
-  it('a tényleges Excel-cellákból csak a támogatott 12-eseket teszi exportálhatóvá', async () => {
-    const session = await parseWorkbook(await whiteTwelveWorkbook(), 'feher-12.xlsx');
+describe('betűformázás-alapú 12 integrációja', () => {
+  it('a hátteret figyelmen kívül hagyva ismeri fel a támogatott 12-eseket', async () => {
+    const session = await parseWorkbook(await fontBasedTwelveWorkbook(), 'font-12.xlsx');
     const month = session.months[0];
     if (!month) throw new Error('Hiányzó teszthónap.');
     const entries = readMonthEntries(session, month, 'teszt elek');
     const result = interpretSchedule(entries, { legend: month.legendStyles });
 
-    for (const day of [1, 2, 3, 4]) {
-      const event = result.events.find((item) =>
-        item.shiftTime.start.startsWith(`2026-08-0${day}`),
-      );
-      expect(event).toMatchObject({
-        summary: 'OMSZ',
-        shiftType: 'Nappalos 07–19',
-        shiftTime: {
-          start: `2026-08-0${day}T07:00:00`,
-          end: `2026-08-0${day}T19:00:00`,
-        },
-        calendarTime: {
-          start: `2026-08-0${day}T07:00:00`,
-          end: `2026-08-0${day}T19:00:00`,
-        },
-      });
+    for (const day of [1, 2, 3, 4, 5, 6, 12]) {
       expect(result.rows.find((row) => row.date.day === day)).toMatchObject({
         status: 'Exportálható',
-        note: 'Fehér vagy kitöltés nélküli 12 felismerve.',
+        serviceCategory: 'Parti szolgálat',
+        event: {
+          shiftTime: {
+            start: `2026-08-${String(day).padStart(2, '0')}T07:00:00`,
+            end: `2026-08-${String(day).padStart(2, '0')}T19:00:00`,
+          },
+        },
       });
     }
-    const noFillRow = result.rows.find((row) => row.date.day === 4);
-    expect(
-      noFillRow?.diagnostics.some(
-        (diagnostic) =>
-          diagnostic.fillPatternType === 'none' &&
-          diagnostic.fillForegroundRaw === 'argb=00000000' &&
-          diagnostic.fillBackgroundRaw === 'argb=000000' &&
-          diagnostic.hasVisibleFill === false &&
-          diagnostic.fillCategory === 'noFill',
-      ),
-    ).toBe(true);
 
-    expect(
-      result.events.find((item) => item.shiftTime.start.startsWith('2026-08-05')),
-    ).toMatchObject({
-      shiftType: 'Nappalos 06–18',
-      shiftTime: { start: '2026-08-05T06:00:00', end: '2026-08-05T18:00:00' },
-    });
-    expect(
-      result.events.find((item) => item.shiftTime.start.startsWith('2026-08-06')),
-    ).toMatchObject({
-      shiftType: 'Nappalos 10–22',
-      shiftTime: { start: '2026-08-06T10:00:00', end: '2026-08-06T22:00:00' },
-    });
     expect(result.rows.find((row) => row.date.day === 7)).toMatchObject({
-      status: 'Bizonytalan',
+      status: 'Exportálható',
+      serviceCategory: 'Esetszolgálat',
     });
-    const blackFillRow = result.rows.find((row) => row.date.day === 12);
-    expect(blackFillRow?.status).toBe('Bizonytalan');
-    expect(
-      blackFillRow?.diagnostics.some(
-        (diagnostic) =>
-          diagnostic.fillPatternType === 'solid' &&
-          diagnostic.fillColor === '#000000' &&
-          diagnostic.hasVisibleFill === true &&
-          diagnostic.fillCategory === 'unsupported',
-      ),
-    ).toBe(true);
-    expect(
-      result.events.some((item) =>
-        ['2026-08-08', '2026-08-09', '2026-08-10', '2026-08-11', '2026-08-12'].some((date) =>
-          item.shiftTime.start.startsWith(date),
-        ),
-      ),
-    ).toBe(false);
+    expect(result.rows.find((row) => row.date.day === 8)).toMatchObject({
+      status: 'Exportálható',
+      serviceCategory: 'Nappalos 06–18',
+      event: {
+        shiftTime: { start: '2026-08-08T06:00:00', end: '2026-08-08T18:00:00' },
+      },
+    });
+    expect(result.rows.find((row) => row.date.day === 9)).toMatchObject({
+      status: 'Exportálható',
+      serviceCategory: '10-es kocsi',
+      event: {
+        shiftTime: { start: '2026-08-09T10:00:00', end: '2026-08-09T22:00:00' },
+      },
+    });
+    expect(result.rows.find((row) => row.date.day === 10)?.status).toBe('Bizonytalan');
+    expect(result.rows.find((row) => row.date.day === 11)?.status).toBe('Kizárva');
+
+    const noFillDiagnostic = result.rows
+      .find((row) => row.date.day === 4)
+      ?.diagnostics.find((diagnostic) => diagnostic.displayedText === '12');
+    expect(noFillDiagnostic).toMatchObject({
+      fillPatternType: 'none',
+      fillForegroundRaw: 'argb=00000000',
+      fillBackgroundRaw: 'argb=000000',
+      hasVisibleFill: false,
+      fontColor: '#000000',
+      positionInDayGroup: 1,
+    });
   });
 });

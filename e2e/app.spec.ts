@@ -24,6 +24,7 @@ async function syntheticWorkbook(): Promise<Buffer> {
   sheet.getCell('B5').value = 'Teszt Elek';
   sheet.getCell('B6').value = 'Összesen';
   sheet.getCell('C5').value = 12;
+  sheet.getCell('C5').font = { color: { argb: 'FF0000FF' } };
   sheet.getCell('C5').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC5D9F1' } };
   sheet.mergeCells('C5:D5');
   sheet.getCell('E5').value = 'KMR';
@@ -210,7 +211,10 @@ test('a 17–7 szolgálat listában 24 órás, ICS-ben és Google-ben 06:59-ig t
   await page.getByLabel('Dolgozó').selectOption('teszt elek');
   await processScheduleButton(page).click();
 
-  const serviceRow = page.locator('tbody tr').filter({ hasText: '24 órás szolgálat' });
+  const serviceRow = page
+    .locator('tbody tr')
+    .filter({ hasText: '24 órás szolgálat' })
+    .filter({ hasText: 'Exportálható' });
   await expect(serviceRow.locator('td[data-label="Kezdés"]')).toHaveText('07:00');
   await expect(serviceRow.locator('td[data-label="Befejezés"]')).toHaveText('07:00');
   await serviceRow.getByText('Technikai részletek').click();
@@ -278,12 +282,17 @@ test('a kitöltés nélküli 12 a listában, ICS-ben és Google-ben 07:00–19:0
   await expect(serviceRow.locator('td[data-label="Kezdés"]')).toHaveText('07:00');
   await expect(serviceRow.locator('td[data-label="Befejezés"]')).toHaveText('19:00');
   await expect(serviceRow.locator('td[data-label="Esemény"]')).toHaveText('OMSZ');
+  await expect(serviceRow.locator('td[data-label="Szolgálati jelleg"]')).toHaveText(
+    'Parti szolgálat',
+  );
   await expect(serviceRow.getByText('Exportálható', { exact: true })).toBeVisible();
-  await expect(serviceRow.getByText('Fehér vagy kitöltés nélküli 12 felismerve.')).toBeVisible();
+  await expect(serviceRow.getByText('Fekete 12 felismerve: Parti szolgálat.')).toBeVisible();
   await serviceRow.getByText('Technikai részletek').click();
   const selectedDiagnostic = serviceRow.locator('dl').filter({ hasText: 'C5' });
   await expect(selectedDiagnostic.getByText('Van látható kitöltés')).toBeVisible();
-  await expect(selectedDiagnostic.getByText('nem', { exact: true })).toBeVisible();
+  await expect(
+    selectedDiagnostic.locator('dt:has-text("Van látható kitöltés") + dd'),
+  ).toHaveText('nem');
   await expect(selectedDiagnostic.getByText('Végső fill kategória')).toBeVisible();
   await expect(selectedDiagnostic.getByText('noFill', { exact: true })).toBeVisible();
 
@@ -298,12 +307,14 @@ test('a kitöltés nélküli 12 a listában, ICS-ben és Google-ben 07:00–19:0
   const icsContent = chunks.join('');
   expect(icsContent).toContain('DTSTART;TZID=Europe/Budapest:20260801T070000');
   expect(icsContent).toContain('DTEND;TZID=Europe/Budapest:20260801T190000');
+  expect(icsContent).toContain('DESCRIPTION:Szolgálati jelleg: Parti szolgálat');
 
   await page.getByRole('button', { name: 'Google-bejelentkezés' }).click();
   await uploadGoogleEvents(page, 1);
   await expect(page.getByRole('heading', { name: 'Sikeres naptárfeltöltés' })).toBeVisible();
   expect(eventRequestBody).toMatchObject({
     summary: 'OMSZ',
+    description: 'Szolgálati jelleg: Parti szolgálat',
     start: { dateTime: '2026-08-01T07:00:00', timeZone: 'Europe/Budapest' },
     end: { dateTime: '2026-08-01T19:00:00', timeZone: 'Europe/Budapest' },
     colorId: '10',

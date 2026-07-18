@@ -26,7 +26,9 @@ export interface ResolvedStyle {
   fillColor?: string;
   hasVisibleFill?: boolean;
   fillCategory?: FillCategory;
+  fontColorRaw?: string;
   fontColor?: string;
+  underline: boolean;
   italic: boolean;
   bold: boolean;
 }
@@ -37,6 +39,7 @@ export interface CellDiagnostic extends ResolvedStyle {
   displayedText: string;
   isMerged: boolean;
   mergeMaster?: string;
+  positionInDayGroup: number;
 }
 
 export interface DayGroup {
@@ -109,18 +112,65 @@ export type ShiftType =
   | 'Éjszakai szolgálat'
   | 'KMR';
 
+export type ServiceCategory =
+  | 'Parti szolgálat'
+  | 'Esetszolgálat'
+  | '6-os kocsi'
+  | '10-es kocsi'
+  | 'Nappalos 06–18'
+  | 'KMR';
+
+export type InferredTwelveKind = 'blue' | 'tenCar';
+
+export interface DailyServicePattern {
+  date: LocalDate;
+  partyTwentyFourHourCount: number;
+  blueTwelveCount: number;
+  tenCarTwelveCount: number;
+  blackTwelveCandidateCount: number;
+  conflictingServiceMarkerCount: number;
+  correction?: {
+    candidateAddress: string;
+    target: InferredTwelveKind;
+    explanation: string;
+  };
+}
+
+export interface ServiceInference {
+  source: 'daily-service-pattern';
+  target: InferredTwelveKind;
+  explanation: string;
+  originalServiceCategory: 'Parti szolgálat';
+  originalShiftType: 'Nappalos 07–19';
+}
+
 export interface EventTimeRange {
   start: string;
   end: string;
+}
+
+export interface DailyInferenceTechnicalDetails {
+  partyTwentyFourHourPresent: boolean;
+  blueTwelvePresent: boolean;
+  tenCarTwelvePresent: boolean;
+  blackTwelveCandidateCount: number;
+  correctionApplied: boolean;
+  originalServiceCategory: 'Parti szolgálat';
+  originalShiftType: 'Nappalos 07–19';
+  finalServiceCategory: ServiceCategory;
+  finalShiftType: ShiftType;
+  finalTime: EventTimeRange;
 }
 
 export interface CalendarEvent {
   id: string;
   summary: 'OMSZ' | 'KMR';
   shiftType: ShiftType;
+  serviceCategory: ServiceCategory;
   shiftTime: EventTimeRange;
   calendarTime: EventTimeRange;
   timeZone: 'Europe/Budapest';
+  inference?: ServiceInference;
 }
 
 export type ReviewStatus =
@@ -148,9 +198,16 @@ export interface ReviewRow {
   date: LocalDate;
   marker: string;
   shiftType?: ShiftType;
+  serviceCategory?: ServiceCategory;
   summary?: 'OMSZ' | 'KMR';
   status: ReviewStatus;
   note: string;
+  timeRule?: string;
+  pairingReferences?: Array<{
+    direction: 'previous' | 'next';
+    address: string;
+  }>;
+  dailyInference?: DailyInferenceTechnicalDetails;
   technicalNote?: string;
   diagnostics: CellDiagnostic[];
   event?: CalendarEvent;

@@ -1,5 +1,6 @@
 import type { CalendarEvent, ReviewStatus } from '../domain/types';
 import { AppError, type AppErrorCode } from '../domain/errors';
+import { calendarEventDescription } from './calendarEventDescription';
 import { instantToLocal, zonedLocalToInstant } from './dates';
 
 const API_ROOT = 'https://www.googleapis.com/calendar/v3';
@@ -127,6 +128,7 @@ export class GoogleCalendarClient {
       signal,
       body: JSON.stringify({
         summary: item.summary,
+        description: calendarEventDescription(item),
         start: { dateTime: item.calendarTime.start, timeZone: item.timeZone },
         end: { dateTime: item.calendarTime.end, timeZone: item.timeZone },
         colorId: GOOGLE_EVENT_COLOR_ID,

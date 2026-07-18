@@ -32,6 +32,7 @@ function diagnostic(
   session: WorkbookSession,
   worksheet: ExcelJS.Worksheet,
   cell: ExcelJS.Cell,
+  positionInDayGroup: number,
 ): CellDiagnostic {
   const master = cell.isMerged ? cell.master : cell;
   const address = master.address;
@@ -41,6 +42,7 @@ function diagnostic(
     displayedText: displayedCellText(master),
     isMerged: cell.isMerged,
     mergeMaster: cell.isMerged ? address : undefined,
+    positionInDayGroup,
     ...resolveCellStyle(
       master,
       session.ooxml.themeColors,
@@ -83,7 +85,7 @@ export function readMonthEntries(
     const allDiagnostics = new Map<string, CellDiagnostic>();
     for (let column = group.startColumn; column <= group.endColumn; column += 1) {
       const cell = worksheet.getCell(rowNumber, column);
-      const item = diagnostic(session, worksheet, cell);
+      const item = diagnostic(session, worksheet, cell, column - group.startColumn + 1);
       if (!allDiagnostics.has(item.address)) allDiagnostics.set(item.address, item);
     }
     const diagnostics = [...allDiagnostics.values()];
@@ -112,6 +114,11 @@ export interface EmployeeScheduleEntries {
   current: DayEntry[];
   previous?: DayEntry;
   next?: DayEntry;
+}
+
+export interface WorksheetEmployeeScheduleEntries extends EmployeeScheduleEntries {
+  normalizedName: string;
+  row: number;
 }
 
 function adjacentMonth(
@@ -157,4 +164,17 @@ export function readEmployeeScheduleEntries(
   if (previous && localDateKey(previous.date) >= localDateKey(current[0]?.date ?? previous.date))
     return { current, next };
   return { current, previous, next };
+}
+
+export function readWorksheetScheduleEntries(
+  session: WorkbookSession,
+  month: MonthSheet,
+): WorksheetEmployeeScheduleEntries[] {
+  return month.employees.flatMap((employee) =>
+    employee.rows.map((row) => ({
+      normalizedName: employee.normalizedName,
+      row,
+      ...readEmployeeScheduleEntries(session, month, employee.normalizedName, row),
+    })),
+  );
 }

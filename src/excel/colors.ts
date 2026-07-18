@@ -3,6 +3,7 @@ import type { FillCategory, ResolvedStyle } from '../domain/types';
 
 interface ExcelColor {
   argb?: string;
+  rgb?: string;
   theme?: number;
   tint?: number;
   indexed?: number;
@@ -15,7 +16,72 @@ interface RuntimeFill {
   bgColor?: ExcelColor;
 }
 
-const INDEXED_WHITE = new Set([1, 9]);
+const INDEXED_COLORS = [
+  '#000000',
+  '#FFFFFF',
+  '#FF0000',
+  '#00FF00',
+  '#0000FF',
+  '#FFFF00',
+  '#FF00FF',
+  '#00FFFF',
+  '#000000',
+  '#FFFFFF',
+  '#FF0000',
+  '#00FF00',
+  '#0000FF',
+  '#FFFF00',
+  '#FF00FF',
+  '#00FFFF',
+  '#800000',
+  '#008000',
+  '#000080',
+  '#808000',
+  '#800080',
+  '#008080',
+  '#C0C0C0',
+  '#808080',
+  '#9999FF',
+  '#993366',
+  '#FFFFCC',
+  '#CCFFFF',
+  '#660066',
+  '#FF8080',
+  '#0066CC',
+  '#CCCCFF',
+  '#000080',
+  '#FF00FF',
+  '#FFFF00',
+  '#00FFFF',
+  '#800080',
+  '#800000',
+  '#008080',
+  '#0000FF',
+  '#00CCFF',
+  '#CCFFFF',
+  '#CCFFCC',
+  '#FFFF99',
+  '#99CCFF',
+  '#FF99CC',
+  '#CC99FF',
+  '#FFCC99',
+  '#3366FF',
+  '#33CCCC',
+  '#99CC00',
+  '#FFCC00',
+  '#FF9900',
+  '#FF6600',
+  '#666699',
+  '#969696',
+  '#003366',
+  '#339966',
+  '#003300',
+  '#333300',
+  '#993300',
+  '#993366',
+  '#333399',
+  '#333333',
+] as const;
 
 function normalizeArgb(argb: string): string {
   const value = argb.replace(/^#/, '').toUpperCase();
@@ -45,19 +111,24 @@ export function resolveExcelColor(
   themeColors: string[],
 ): string | undefined {
   if (!color) return undefined;
-  if (color.argb) return normalizeArgb(color.argb);
-  if (typeof color.theme === 'number') {
-    const base = themeColors[color.theme];
-    return base ? tintColor(base, color.tint ?? 0) : undefined;
-  }
-  if (typeof color.indexed === 'number' && INDEXED_WHITE.has(color.indexed)) return '#FFFFFF';
-  return undefined;
+  const base = color.argb
+    ? normalizeArgb(color.argb)
+    : color.rgb
+      ? normalizeArgb(color.rgb)
+    : typeof color.theme === 'number'
+      ? themeColors[color.theme]
+      : typeof color.indexed === 'number'
+        ? INDEXED_COLORS[color.indexed]
+        : undefined;
+  if (!base) return undefined;
+  return color.tint ? tintColor(base, color.tint) : base;
 }
 
 export function describeExcelColor(color: ExcelColor | undefined): string | undefined {
   if (!color) return undefined;
   const parts: string[] = [];
   if (color.argb) parts.push(`argb=${color.argb.toUpperCase()}`);
+  if (color.rgb) parts.push(`rgb=${color.rgb.toUpperCase()}`);
   if (typeof color.theme === 'number') parts.push(`theme=${color.theme}`);
   if (typeof color.indexed === 'number') parts.push(`indexed=${color.indexed}`);
   if (typeof color.tint === 'number') parts.push(`tint=${color.tint}`);
@@ -100,6 +171,9 @@ export function resolveCellStyle(
     hasVisibleFill && runtimeFill?.type === 'pattern' && runtimeFill.pattern === 'solid'
       ? resolveExcelColor(runtimeFill.fgColor, themeColors)
       : undefined;
+  const rawFontColor = styled.font?.color;
+  const normalizedFontColor = resolveExcelColor(rawFontColor, themeColors);
+  const underline = styled.font?.underline;
   return {
     styleId: styleId ?? styled.styleId,
     fillType: runtimeFill?.type,
@@ -109,7 +183,9 @@ export function resolveCellStyle(
     fillColor,
     hasVisibleFill,
     fillCategory: baseFillCategory(hasVisibleFill, fillColor),
-    fontColor: resolveExcelColor(styled.font?.color, themeColors),
+    fontColorRaw: describeExcelColor(rawFontColor),
+    fontColor: normalizedFontColor ?? (rawFontColor ? undefined : '#000000'),
+    underline: underline === true || (typeof underline === 'string' && underline !== 'none'),
     italic: styled.font?.italic === true,
     bold: styled.font?.bold === true,
   };
@@ -146,4 +222,14 @@ export function isBlue(color?: string): boolean {
 
 export function isWhite(color?: string): boolean {
   return color?.toUpperCase() === '#FFFFFF';
+}
+
+export function isRed(color?: string): boolean {
+  if (!color) return false;
+  const [red, green, blue] = rgb(color);
+  return red > green * 1.45 && red > blue * 1.45;
+}
+
+export function isBlack(color?: string): boolean {
+  return color?.toUpperCase() === '#000000';
 }

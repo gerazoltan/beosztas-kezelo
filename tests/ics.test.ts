@@ -8,6 +8,7 @@ function calendarEvent(id: string, summary: 'OMSZ' | 'KMR' = 'OMSZ'): CalendarEv
     id,
     summary,
     shiftType: summary === 'KMR' ? 'KMR' : 'Nappalos 06–18',
+    serviceCategory: summary === 'KMR' ? 'KMR' : 'Nappalos 06–18',
     shiftTime: { start: '2026-08-10T06:00:00', end: '2026-08-10T18:00:00' },
     calendarTime: { start: '2026-08-10T06:00:00', end: '2026-08-10T18:00:00' },
     timeZone: 'Europe/Budapest',
@@ -20,6 +21,7 @@ describe('ICS-generátor', () => {
     expect(content).toContain('BEGIN:VTIMEZONE\r\nTZID:Europe/Budapest');
     expect(content).toContain('DTSTART;TZID=Europe/Budapest:20260810T060000');
     expect(content).toContain('DTEND;TZID=Europe/Budapest:20260810T180000');
+    expect(content).toContain('DESCRIPTION:Szolgálati jelleg: Nappalos 06–18');
     expect(content).toContain('RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU');
     expect(content.endsWith('\r\n')).toBe(true);
   });
@@ -43,6 +45,8 @@ describe('ICS-generátor', () => {
       rawValue: '17',
       displayedText: '17',
       isMerged: false,
+      positionInDayGroup: 1,
+      underline: false,
       italic: false,
       bold: false,
     };
@@ -81,13 +85,15 @@ describe('ICS-generátor', () => {
     expect(content).not.toContain('DTEND;TZID=Europe/Budapest:20260804T070000');
   });
 
-  it('a fehér 12 szolgálatot 07:00–19:00 között exportálja', () => {
+  it('a fekete 12 Parti szolgálatot 07:00–19:00 között exportálja', () => {
     const diagnostic = {
       address: 'C5',
       rawValue: '12',
       displayedText: '12',
       isMerged: false,
+      positionInDayGroup: 1,
       hasVisibleFill: false,
+      underline: false,
       italic: false,
       bold: false,
     };
@@ -130,8 +136,11 @@ describe('ICS-generátor', () => {
       rawValue: '12',
       displayedText: '12',
       isMerged: false,
+      positionInDayGroup: 1,
       fillColor: '#F4CCCC',
       hasVisibleFill: true,
+      fontColor: '#800080',
+      underline: false,
       italic: false,
       bold: false,
     };

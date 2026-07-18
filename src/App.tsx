@@ -1,7 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
 import type { GoogleEventState, ScheduleResult, WorkbookSession } from './domain/types';
 import { AppError, toAppError } from './domain/errors';
-import { readEmployeeScheduleEntries } from './excel/dayEntries';
+import {
+  readEmployeeScheduleEntries,
+  readWorksheetScheduleEntries,
+} from './excel/dayEntries';
+import { buildDailyServicePatterns } from './services/dailyServiceInference';
 import { buildIcs, downloadIcs, icsFileName } from './services/ics';
 import type { GoogleWriteResult } from './services/googleCalendar';
 import { interpretSchedule } from './services/shifts';
@@ -166,10 +170,14 @@ export default function App() {
         employeeName,
         employeeRow,
       );
+      const dailyServicePatterns = buildDailyServicePatterns(
+        readWorksheetScheduleEntries(session, selectedMonth),
+      );
       const interpreted = interpretSchedule(entries.current, {
         legend: selectedMonth.legendStyles,
         previous: entries.previous,
         next: entries.next,
+        dailyServicePatterns,
       });
       setResult(interpreted);
       setSelectedEvents(new Set(interpreted.events.map((event) => event.id)));

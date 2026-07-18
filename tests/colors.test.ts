@@ -8,6 +8,7 @@ describe('szín- és stílusfeloldás', () => {
     expect(resolveExcelColor({ argb: 'FF123456' }, [])).toBe('#123456');
     expect(resolveExcelColor({ argb: 'FFFFFFFF' }, [])).toBe('#FFFFFF');
     expect(resolveExcelColor({ argb: 'FFFFFF' }, [])).toBe('#FFFFFF');
+    expect(resolveExcelColor({ rgb: '008000' }, [])).toBe('#008000');
   });
 
   it('feloldja a theme + tint színt', () => {
@@ -15,11 +16,13 @@ describe('szín- és stílusfeloldás', () => {
     expect(tintColor('#80C080', -0.25)).toBe('#609060');
   });
 
-  it('feloldja a theme- és indexed-fehéret, de az ismeretlen indexed színt nem találja ki', () => {
+  it('feloldja a theme- és indexed-színeket, de a rendszer indexed színét nem találja ki', () => {
     expect(resolveExcelColor({ theme: 0 }, ['#FFFFFF'])).toBe('#FFFFFF');
     expect(resolveExcelColor({ indexed: 1 }, [])).toBe('#FFFFFF');
     expect(resolveExcelColor({ indexed: 9 }, [])).toBe('#FFFFFF');
-    expect(resolveExcelColor({ indexed: 42 }, [])).toBeUndefined();
+    expect(resolveExcelColor({ indexed: 2 }, [])).toBe('#FF0000');
+    expect(resolveExcelColor({ indexed: 17 }, [])).toBe('#008000');
+    expect(resolveExcelColor({ indexed: 64 }, [])).toBeUndefined();
   });
 
   it('solid kitöltésnél az fgColor értékét használja', () => {
@@ -79,7 +82,7 @@ describe('szín- és stílusfeloldás', () => {
     });
   });
 
-  it('a valódi solid fekete kitöltést látható, nem támogatott 12-ként kezeli', () => {
+  it('a valódi solid fekete hátteret technikailag megőrzi, de a 12-et a fekete betű alapján osztályozza', () => {
     const sheet = new ExcelJS.Workbook().addWorksheet('Teszt');
     const cell = sheet.getCell('A1');
     cell.value = 12;
@@ -97,40 +100,77 @@ describe('szín- és stílusfeloldás', () => {
       hasVisibleFill: true,
       fillColor: '#000000',
     });
-    expect(classifyTwelve(style, { blue12: [], green12: [] })).toBe('unknown');
+    expect(classifyTwelve(style)).toBe('party');
   });
 
-  it('elkülöníti a kék, zöld, fehér és ismeretlen 12-est', () => {
-    const legend = { blue12: [], green12: [] };
+  it('központilag normalizálja a font nyers színét, alapértelmezését és aláhúzását', () => {
+    const sheet = new ExcelJS.Workbook().addWorksheet('Teszt');
+    const defaultBlack = sheet.getCell('A1');
+    const themed = sheet.getCell('A2');
+    themed.font = { color: { theme: 1 }, underline: true };
+    const indexed = sheet.getCell('A3');
+    indexed.font = { color: { indexed: 2 } as unknown as ExcelJS.Color };
+    const theme = ['#FFFFFF', '#000000'];
+
+    expect(resolveCellStyle(defaultBlack, theme)).toMatchObject({
+      fontColorRaw: undefined,
+      fontColor: '#000000',
+      underline: false,
+    });
+    expect(resolveCellStyle(themed, theme)).toMatchObject({
+      fontColorRaw: 'theme=1',
+      fontColor: '#000000',
+      underline: true,
+    });
+    expect(resolveCellStyle(indexed, theme)).toMatchObject({
+      fontColorRaw: 'indexed=2',
+      fontColor: '#FF0000',
+    });
+  });
+
+  it('csak a betűszín és az aláhúzás alapján különíti el a 12-eseket', () => {
     expect(
-      classifyTwelve(
-        { fillColor: '#C5D9F1', hasVisibleFill: true, italic: false, bold: false },
-        legend,
-      ),
+      classifyTwelve({
+        fontColor: '#0000FF',
+        fillColor: '#00FF00',
+        underline: false,
+        italic: false,
+        bold: false,
+      }),
     ).toBe('blue');
-    expect(classifyTwelve({ fontColor: '#008000', italic: true, bold: false }, legend)).toBe(
-      'green',
-    );
-    expect(classifyTwelve({ hasVisibleFill: false, italic: false, bold: false }, legend)).toBe(
-      'white',
-    );
     expect(
-      classifyTwelve(
-        { fillColor: '#FFFFFF', hasVisibleFill: true, italic: false, bold: false },
-        legend,
-      ),
-    ).toBe('white');
+      classifyTwelve({
+        fontColor: '#008000',
+        underline: true,
+        italic: true,
+        bold: false,
+      }),
+    ).toBe('tenCar');
     expect(
-      classifyTwelve(
-        { fillColor: '#F4CCCC', hasVisibleFill: true, italic: false, bold: false },
-        legend,
-      ),
+      classifyTwelve({
+        fontColor: '#008000',
+        underline: false,
+        italic: true,
+        bold: false,
+      }),
     ).toBe('unknown');
-    expect(classifyTwelve({ hasVisibleFill: true, italic: false, bold: false }, legend)).toBe(
-      'unknown',
-    );
-    expect(classifyTwelve({ fontColor: '#000000', italic: false, bold: false }, legend)).toBe(
-      'white',
-    );
+    expect(
+      classifyTwelve({
+        fontColor: '#FF0000',
+        fillColor: '#FFF2CC',
+        underline: false,
+        italic: false,
+        bold: false,
+      }),
+    ).toBe('emergency');
+    expect(
+      classifyTwelve({
+        fontColor: '#000000',
+        fillColor: '#C6EFCE',
+        underline: false,
+        italic: false,
+        bold: false,
+      }),
+    ).toBe('party');
   });
 });

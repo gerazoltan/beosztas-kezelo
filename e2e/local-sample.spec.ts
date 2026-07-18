@@ -18,5 +18,5 @@ test('helyi valós mintafájlos böngészős smoke', async ({ page }) => {
   await page.getByRole('button', { name: 'Beosztás feldolgozása' }).click();
   await expect(page.getByRole('heading', { name: 'Ellenőrzés' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Export' })).toBeVisible();
-  await expect(page.getByText('Felismert szolgálat')).toBeVisible();
+  await expect(page.getByText('Felismert szolgálat', { exact: true })).toBeVisible();
 });

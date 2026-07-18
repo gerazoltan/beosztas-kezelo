@@ -28,11 +28,12 @@ export async function workbookBuffer(
     if (month.name === 'Augusztus') {
       const first = sheet.getCell(5, 3);
       first.value = 12;
+      first.font = { color: { argb: 'FF0000FF' } };
       first.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC5D9F1' } };
       sheet.mergeCells(5, 3, 5, 4);
       const second = sheet.getCell(5, 5);
       second.value = 12;
-      second.font = { color: { argb: 'FF008000' }, italic: true };
+      second.font = { color: { argb: 'FF008000' }, italic: true, underline: true };
       sheet.getCell(5, 7).value = 17;
       sheet.getCell(5, 9).value = 7;
       sheet.getCell(5, 11).value = 5;
@@ -45,11 +46,12 @@ export async function workbookBuffer(
 
       const blueLegend = sheet.getCell(12, 3);
       blueLegend.value = 12;
+      blueLegend.font = { color: { argb: 'FF0000FF' } };
       blueLegend.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC5D9F1' } };
       sheet.getCell(12, 4).value = 'Nappalos 06-18';
       const greenLegend = sheet.getCell(13, 3);
       greenLegend.value = 12;
-      greenLegend.font = { color: { argb: 'FF008000' }, italic: true };
+      greenLegend.font = { color: { argb: 'FF008000' }, italic: true, underline: true };
       sheet.getCell(13, 4).value = 'Nappalos 10-22';
       sheet.getCell(15, 70).value = 'KMR';
       sheet.getCell(15, 71).value = 'Ápoló/GKV';
@@ -59,6 +61,42 @@ export async function workbookBuffer(
   const result = await workbook.xlsx.writeBuffer();
   const bytes = new Uint8Array(result);
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+export async function dailyInferenceWorkbookBuffer(
+  presentVehicle: 'blue' | 'tenCar',
+): Promise<ArrayBuffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Augusztus');
+  sheet.getCell('B2').value = '2026. augusztus';
+  sheet.getCell('B4').value = 'Név';
+  sheet.getCell('C4').value = 1;
+  sheet.getCell('E4').value = 2;
+
+  sheet.getCell('B5').value = 'Huszonnégy Órás';
+  sheet.getCell('C5').value = 17;
+  sheet.getCell('C5').font = { color: { argb: 'FF000000' } };
+  sheet.getCell('E5').value = 7;
+
+  sheet.getCell('B6').value = 'Nappali Kocsi';
+  sheet.getCell('C6').value = 12;
+  sheet.getCell('C6').font =
+    presentVehicle === 'blue'
+      ? { color: { argb: 'FF0000FF' } }
+      : { color: { argb: 'FF008000' }, underline: true };
+
+  sheet.getCell('B7').value = 'Jelölt Dolgozó';
+  sheet.getCell('C7').value = 12;
+  sheet.getCell('C7').font = { color: { argb: 'FF000000' } };
+  sheet.getCell('C7').fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFFFF2CC' },
+  };
+
+  sheet.getCell('B8').value = 'Összesen';
+  const result = new Uint8Array(await workbook.xlsx.writeBuffer());
+  return result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength);
 }
 
 export function asFile(buffer: ArrayBuffer, name = 'anonim-minta.xlsx'): File {

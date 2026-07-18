@@ -8,6 +8,7 @@ const item: CalendarEvent = {
   id: 'event-1',
   summary: 'OMSZ',
   shiftType: 'Nappalos 06–18',
+  serviceCategory: 'Nappalos 06–18',
   shiftTime: { start: '2026-08-10T06:00:00', end: '2026-08-10T18:00:00' },
   calendarTime: { start: '2026-08-10T06:00:00', end: '2026-08-10T18:00:00' },
   timeZone: 'Europe/Budapest',
@@ -18,6 +19,7 @@ const kmrItem: CalendarEvent = {
   id: 'event-kmr',
   summary: 'KMR',
   shiftType: 'KMR',
+  serviceCategory: 'KMR',
   shiftTime: { start: '2026-08-11T05:00:00', end: '2026-08-12T01:00:00' },
   calendarTime: { start: '2026-08-11T05:00:00', end: '2026-08-12T01:00:00' },
 };
@@ -26,14 +28,16 @@ const twentyFourHourItem: CalendarEvent = {
   ...item,
   id: 'event-24-hour',
   shiftType: '24 órás szolgálat',
+  serviceCategory: 'Parti szolgálat',
   shiftTime: { start: '2026-08-31T07:00:00', end: '2026-09-01T07:00:00' },
   calendarTime: { start: '2026-08-31T07:00:00', end: '2026-09-01T06:59:00' },
 };
 
-const whiteTwelveItem: CalendarEvent = {
+const partyTwelveItem: CalendarEvent = {
   ...item,
-  id: 'event-white-12',
+  id: 'event-party-12',
   shiftType: 'Nappalos 07–19',
+  serviceCategory: 'Parti szolgálat',
   shiftTime: { start: '2026-08-12T07:00:00', end: '2026-08-12T19:00:00' },
   calendarTime: { start: '2026-08-12T07:00:00', end: '2026-08-12T19:00:00' },
 };
@@ -178,6 +182,7 @@ describe('Google Naptár szolgáltatás', () => {
 
     expect(requestBody).toMatchObject({
       summary: 'OMSZ',
+      description: 'Szolgálati jelleg: Parti szolgálat',
       start: {
         dateTime: '2026-08-31T07:00:00',
         timeZone: 'Europe/Budapest',
@@ -189,18 +194,19 @@ describe('Google Naptár szolgáltatás', () => {
     });
   });
 
-  it('fehér 12 feltöltésnél a request body a 07:00–19:00 naptári időt használja', async () => {
+  it('Parti 12 feltöltésnél a request body a 07:00–19:00 időt és a szolgálati leírást használja', async () => {
     let requestBody: unknown;
     const fetcher = vi.fn<typeof fetch>().mockImplementation((_input, init) => {
       if (typeof init?.body !== 'string') throw new Error('Hiányzó JSON request body.');
       requestBody = JSON.parse(init.body) as unknown;
-      return Promise.resolve(response({ id: 'created-white-12', colorId: '10' }));
+      return Promise.resolve(response({ id: 'created-party-12', colorId: '10' }));
     });
 
-    await new GoogleCalendarClient('token', fetcher).insertEvent('primary', whiteTwelveItem);
+    await new GoogleCalendarClient('token', fetcher).insertEvent('primary', partyTwelveItem);
 
     expect(requestBody).toMatchObject({
       summary: 'OMSZ',
+      description: 'Szolgálati jelleg: Parti szolgálat',
       start: {
         dateTime: '2026-08-12T07:00:00',
         timeZone: 'Europe/Budapest',

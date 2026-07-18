@@ -2,7 +2,11 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
-import { asFile, workbookBuffer } from './fixtures/syntheticWorkbook';
+import {
+  asFile,
+  dailyInferenceWorkbookBuffer,
+  workbookBuffer,
+} from './fixtures/syntheticWorkbook';
 
 describe('felhasználói felület', () => {
   beforeEach(() => {
@@ -62,9 +66,10 @@ describe('felhasználói felület', () => {
     const reviewTable = await screen.findByRole('table');
     expect(screen.getByRole('button', { name: /Ellenőrzés.*Teljesítve/u })).toBeEnabled();
     expect(screen.getByRole('button', { name: /Export.*Aktuális/u })).toBeEnabled();
-    expect(within(reviewTable).getByText('Nappalos 06–18')).toBeInTheDocument();
-    expect(within(reviewTable).getByText('Nappalos 10–22')).toBeInTheDocument();
-    const twentyFourHourRow = within(reviewTable).getByText('24 órás szolgálat').closest('tr');
+    expect(within(reviewTable).getAllByText('Nappalos 06–18').length).toBeGreaterThan(0);
+    expect(within(reviewTable).getAllByText('Nappalos 10–22').length).toBeGreaterThan(0);
+    expect(within(reviewTable).getAllByText('10-es kocsi').length).toBeGreaterThan(0);
+    const twentyFourHourRow = within(reviewTable).getAllByText('24 órás szolgálat')[0]?.closest('tr');
     if (!twentyFourHourRow) throw new Error('Hiányzó 24 órás szolgálati sor.');
     expect(within(twentyFourHourRow).getAllByText('07:00')).toHaveLength(2);
     expect(
@@ -99,6 +104,32 @@ describe('felhasználói felület', () => {
     );
     expect(screen.getByRole('button', { name: /Ellenőrzés.*Aktuális/u })).toBeEnabled();
     expect(screen.getByRole('button', { name: /Export.*Nem elérhető/u })).toBeDisabled();
+  });
+
+  it('a kijelölt dolgozó szolgálatát a munkalap más dolgozóinak napi jelölései alapján korrigálja', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.upload(
+      screen.getByTestId('file-input'),
+      asFile(await dailyInferenceWorkbookBuffer('blue'), 'napi-osszefugges.xlsx'),
+    );
+    await user.selectOptions(await screen.findByLabelText('Dolgozó'), 'jelölt dolgozó');
+    await user.click(screen.getByRole('button', { name: 'Beosztás feldolgozása' }));
+
+    const category = await screen.findByText('10-es kocsi – következtetett');
+    const row = category.closest('tr');
+    if (!row) throw new Error('Hiányzó következtetett szolgálati sor.');
+    expect(within(row).getByText('10:00')).toBeVisible();
+    expect(within(row).getByText('22:00')).toBeVisible();
+    expect(within(row).getByText(/hiányzott a 10-es kocsi/)).toBeVisible();
+
+    await user.click(within(row).getByText('Technikai részletek'));
+    expect(within(row).getByText('24 órás Parti szolgálat jelen van')).toBeVisible();
+    expect(within(row).getByText('Kék 12 jelen van')).toBeVisible();
+    expect(within(row).getByText('Fekete 12 jelöltek száma')).toBeVisible();
+    expect(within(row).getByText('Következtetett korrekció történt')).toBeVisible();
+    expect(within(row).getByText(/Parti szolgálat, Nappalos 07–19/)).toBeVisible();
+    expect(within(row).getByText(/10-es kocsi, Nappalos 10–22/)).toBeVisible();
   });
 
   it('teljesített lépésre kattintva a megfelelő valódi szakaszhoz görget', async () => {

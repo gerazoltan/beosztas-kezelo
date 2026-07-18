@@ -60,6 +60,7 @@ export function ReviewTable({
               <th scope="col">Nap</th>
               <th scope="col">Felismert Excel-jelölés</th>
               <th scope="col">Szolgálat típusa</th>
+              <th scope="col">Szolgálati jelleg</th>
               <th scope="col">Kezdés</th>
               <th scope="col">Befejezés</th>
               <th scope="col">Naptáresemény neve</th>
@@ -70,6 +71,9 @@ export function ReviewTable({
           <tbody>
             {rows.map((row) => {
               const eventId = row.event?.id;
+              const inferredDiagnostic = row.dailyInference
+                ? row.diagnostics.find((diagnostic) => diagnostic.displayedText.trim() === '12')
+                : undefined;
               const googleState = eventId ? googleStates.get(eventId) : undefined;
               const displayedStatus = googleState?.status ?? row.status;
               const issue =
@@ -96,6 +100,13 @@ export function ReviewTable({
                     <strong>{row.marker || '—'}</strong>
                   </td>
                   <td data-label="Szolgálat">{row.shiftType ?? '—'}</td>
+                  <td data-label="Szolgálati jelleg">
+                    {row.serviceCategory
+                      ? `${row.serviceCategory}${
+                          row.dailyInference?.correctionApplied ? ' – következtetett' : ''
+                        }`
+                      : '—'}
+                  </td>
                   <td data-label="Kezdés">{time(row.event?.shiftTime.start)}</td>
                   <td data-label="Befejezés">{time(row.event?.shiftTime.end)}</td>
                   <td data-label="Esemény">{row.summary ?? '—'}</td>
@@ -123,6 +134,55 @@ export function ReviewTable({
                     <details className="diagnostics">
                       <summary>Technikai részletek</summary>
                       {row.technicalNote && <p>{row.technicalNote}</p>}
+                      {row.timeRule && (
+                        <p>
+                          <strong>Felismert időszabály:</strong> {row.timeRule}
+                        </p>
+                      )}
+                      {row.pairingReferences?.map((reference) => (
+                        <p key={`${reference.direction}-${reference.address}`}>
+                          <strong>Párosításhoz használt cella:</strong>{' '}
+                          {reference.direction === 'previous' ? 'előző' : 'következő'} –{' '}
+                          {reference.address}
+                        </p>
+                      ))}
+                      {row.dailyInference && (
+                        <dl>
+                          <dt>Eredeti érték</dt>
+                          <dd>{inferredDiagnostic?.displayedText ?? row.marker}</dd>
+                          <dt>Eredeti betűszín</dt>
+                          <dd>{inferredDiagnostic?.fontColor ?? '—'}</dd>
+                          <dt>Eredeti aláhúzás</dt>
+                          <dd>{inferredDiagnostic?.underline ? 'igen' : 'nem'}</dd>
+                          <dt>24 órás Parti szolgálat jelen van</dt>
+                          <dd>
+                            {row.dailyInference.partyTwentyFourHourPresent ? 'igen' : 'nem'}
+                          </dd>
+                          <dt>Kék 12 jelen van</dt>
+                          <dd>{row.dailyInference.blueTwelvePresent ? 'igen' : 'nem'}</dd>
+                          <dt>Zöld-aláhúzott 12 jelen van</dt>
+                          <dd>{row.dailyInference.tenCarTwelvePresent ? 'igen' : 'nem'}</dd>
+                          <dt>Fekete 12 jelöltek száma</dt>
+                          <dd>{row.dailyInference.blackTwelveCandidateCount}</dd>
+                          <dt>Következtetett korrekció történt</dt>
+                          <dd>{row.dailyInference.correctionApplied ? 'igen' : 'nem'}</dd>
+                          <dt>Eredeti szolgálattípus</dt>
+                          <dd>
+                            {row.dailyInference.originalServiceCategory},{' '}
+                            {row.dailyInference.originalShiftType}
+                          </dd>
+                          <dt>Végső szolgálattípus</dt>
+                          <dd>
+                            {row.dailyInference.finalServiceCategory},{' '}
+                            {row.dailyInference.finalShiftType}
+                          </dd>
+                          <dt>Végső időintervallum</dt>
+                          <dd>
+                            {time(row.dailyInference.finalTime.start)}–
+                            {time(row.dailyInference.finalTime.end)}
+                          </dd>
+                        </dl>
+                      )}
                       {row.diagnostics.map((item) => (
                         <dl key={item.address}>
                           <dt>Cella</dt>
@@ -134,11 +194,19 @@ export function ReviewTable({
                           <dd>
                             {item.rawValue || '∅'} / {item.displayedText || '∅'}
                           </dd>
+                          <dt>Napi cellacsoporton belüli pozíció</dt>
+                          <dd>{item.positionInDayGroup}.</dd>
                           <dt>Stílus</dt>
                           <dd>
-                            #{item.styleId ?? '—'}, betű {item.fontColor ?? '—'}, dőlt{' '}
-                            {item.italic ? 'igen' : 'nem'}, félkövér {item.bold ? 'igen' : 'nem'}
+                            #{item.styleId ?? '—'}, dőlt {item.italic ? 'igen' : 'nem'}, félkövér{' '}
+                            {item.bold ? 'igen' : 'nem'}
                           </dd>
+                          <dt>Betűszín nyers értéke</dt>
+                          <dd>{item.fontColorRaw ?? 'alapértelmezett'}</dd>
+                          <dt>Betűszín normalizált értéke</dt>
+                          <dd>{item.fontColor ?? '—'}</dd>
+                          <dt>Aláhúzott</dt>
+                          <dd>{item.underline ? 'igen' : 'nem'}</dd>
                           <dt>Fill típusa</dt>
                           <dd>{item.fillType ?? '—'}</dd>
                           <dt>patternType</dt>
@@ -153,6 +221,8 @@ export function ReviewTable({
                           <dd>{item.fillColor ?? '—'}</dd>
                           <dt>Végső fill kategória</dt>
                           <dd>{item.fillCategory ?? '—'}</dd>
+                          <dt>Felismert szolgálati kategória</dt>
+                          <dd>{row.serviceCategory ?? '—'}</dd>
                         </dl>
                       ))}
                     </details>
