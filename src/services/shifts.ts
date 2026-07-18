@@ -2,6 +2,7 @@ import type {
   CalendarEvent,
   DayEntry,
   EventTimeRange,
+  FillCategory,
   LegendStyles,
   ResolvedStyle,
   ReviewRow,
@@ -9,7 +10,7 @@ import type {
   ShiftType,
 } from '../domain/types';
 import { addDays, localDateKey, localDateTime } from './dates';
-import { isBlue, isGreen } from '../excel/colors';
+import { isBlue, isGreen, isWhite } from '../excel/colors';
 
 const NON_SERVICE_MARKERS = new Set([
   '',
@@ -63,13 +64,14 @@ function timeRange(start: string, end: string): EventTimeRange {
 function sameStyle(first: ResolvedStyle, second: ResolvedStyle): boolean {
   return (
     first.fillColor === second.fillColor &&
+    first.hasVisibleFill === second.hasVisibleFill &&
     first.fontColor === second.fontColor &&
     first.italic === second.italic &&
     first.bold === second.bold
   );
 }
 
-export type TwelveKind = 'blue' | 'green' | 'unknown';
+export type TwelveKind = 'blue' | 'white' | 'green' | 'unknown';
 
 export function classifyTwelve(style: ResolvedStyle | undefined, legend: LegendStyles): TwelveKind {
   if (!style) return 'unknown';
@@ -77,7 +79,31 @@ export function classifyTwelve(style: ResolvedStyle | undefined, legend: LegendS
   if (legend.blue12.some((reference) => sameStyle(reference, style))) return 'blue';
   if (style.italic && isGreen(style.fontColor)) return 'green';
   if (!style.italic && isBlue(style.fillColor)) return 'blue';
+  const hasVisibleFill = style.hasVisibleFill ?? style.fillColor !== undefined;
+  if (!hasVisibleFill || isWhite(style.fillColor)) return 'white';
   return 'unknown';
+}
+
+function fillCategoryForTwelve(kind: TwelveKind, style: ResolvedStyle | undefined): FillCategory {
+  if (kind === 'blue' || kind === 'green') return kind;
+  if (kind === 'white') return style?.hasVisibleFill ? 'white' : 'noFill';
+  return 'unsupported';
+}
+
+function withTwelveFillCategory(entry: DayEntry, kind: TwelveKind): DayEntry {
+  const selected = entry.selectedDiagnostic;
+  if (!selected) return entry;
+  const selectedDiagnostic = {
+    ...selected,
+    fillCategory: fillCategoryForTwelve(kind, selected),
+  };
+  return {
+    ...entry,
+    selectedDiagnostic,
+    diagnostics: entry.diagnostics.map((item) =>
+      item.address === selected.address ? selectedDiagnostic : item,
+    ),
+  };
 }
 
 function rowForEvent(entry: DayEntry, created: CalendarEvent, note: string): ReviewRow {
@@ -163,27 +189,48 @@ export function interpretSchedule(
     const marker = entry.normalizedMarker;
     if (marker === '12') {
       const twelveKind = classifyTwelve(entry.selectedDiagnostic, legend);
+      const categorizedEntry = withTwelveFillCategory(entry, twelveKind);
       if (twelveKind === 'unknown') {
         rows.push(
           issueRow(
-            entry,
+            categorizedEntry,
             'Bizonytalan',
-            'A 12 formázása nem sorolható megbízhatóan a kék vagy zöld szolgálathoz.',
+            'A 12 látható formázása nem sorolható megbízhatóan a támogatott szolgálatokhoz.',
           ),
         );
         return;
       }
-      const isGreenTwelve = twelveKind === 'green';
+      const twelveConfig =
+        twelveKind === 'green'
+          ? {
+              shiftType: 'Nappalos 10–22' as const,
+              start: '10:00',
+              end: '22:00',
+              note: 'Zöld 12 felismerve.',
+            }
+          : twelveKind === 'white'
+            ? {
+                shiftType: 'Nappalos 07–19' as const,
+                start: '07:00',
+                end: '19:00',
+                note: 'Fehér vagy kitöltés nélküli 12 felismerve.',
+              }
+            : {
+                shiftType: 'Nappalos 06–18' as const,
+                start: '06:00',
+                end: '18:00',
+                note: 'Kék 12 felismerve.',
+              };
       const created = event(
         'OMSZ',
-        isGreenTwelve ? 'Nappalos 10–22' : 'Nappalos 06–18',
+        twelveConfig.shiftType,
         timeRange(
-          localDateTime(entry.date, isGreenTwelve ? '10:00' : '06:00'),
-          localDateTime(entry.date, isGreenTwelve ? '22:00' : '18:00'),
+          localDateTime(entry.date, twelveConfig.start),
+          localDateTime(entry.date, twelveConfig.end),
         ),
       );
       events.push(created);
-      rows.push(rowForEvent(entry, created, `${isGreenTwelve ? 'Zöld' : 'Kék'} 12 felismerve.`));
+      rows.push(rowForEvent(categorizedEntry, created, twelveConfig.note));
       return;
     }
 

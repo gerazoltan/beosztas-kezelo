@@ -1,11 +1,21 @@
 import type ExcelJS from 'exceljs';
-import type { ResolvedStyle } from '../domain/types';
+import type { FillCategory, ResolvedStyle } from '../domain/types';
 
 interface ExcelColor {
   argb?: string;
   theme?: number;
   tint?: number;
+  indexed?: number;
 }
+
+interface RuntimeFill {
+  type?: string;
+  pattern?: string;
+  fgColor?: ExcelColor;
+  bgColor?: ExcelColor;
+}
+
+const INDEXED_WHITE = new Set([1, 9]);
 
 function normalizeArgb(argb: string): string {
   const value = argb.replace(/^#/, '').toUpperCase();
@@ -40,13 +50,41 @@ export function resolveExcelColor(
     const base = themeColors[color.theme];
     return base ? tintColor(base, color.tint ?? 0) : undefined;
   }
+  if (typeof color.indexed === 'number' && INDEXED_WHITE.has(color.indexed)) return '#FFFFFF';
   return undefined;
+}
+
+export function describeExcelColor(color: ExcelColor | undefined): string | undefined {
+  if (!color) return undefined;
+  const parts: string[] = [];
+  if (color.argb) parts.push(`argb=${color.argb.toUpperCase()}`);
+  if (typeof color.theme === 'number') parts.push(`theme=${color.theme}`);
+  if (typeof color.indexed === 'number') parts.push(`indexed=${color.indexed}`);
+  if (typeof color.tint === 'number') parts.push(`tint=${color.tint}`);
+  return parts.length > 0 ? parts.join(', ') : undefined;
 }
 
 interface StyleCell {
   styleId?: number;
   fill?: ExcelJS.Fill;
   font?: Partial<ExcelJS.Font>;
+}
+
+export function fillIsVisible(fill: ExcelJS.Fill | undefined): boolean {
+  if (!fill) return false;
+  const runtime = fill as ExcelJS.Fill & RuntimeFill;
+  if (runtime.type === 'pattern') {
+    return typeof runtime.pattern === 'string' && runtime.pattern !== 'none';
+  }
+  return runtime.type === 'gradient';
+}
+
+function baseFillCategory(hasVisibleFill: boolean, fillColor: string | undefined): FillCategory {
+  if (!hasVisibleFill) return 'noFill';
+  if (isWhite(fillColor)) return 'white';
+  if (isBlue(fillColor)) return 'blue';
+  if (isGreen(fillColor)) return 'green';
+  return 'unsupported';
 }
 
 export function resolveCellStyle(
@@ -56,13 +94,21 @@ export function resolveCellStyle(
 ): ResolvedStyle {
   const styled = cell as ExcelJS.Cell & StyleCell;
   const fill = styled.fill;
+  const runtimeFill = fill as (ExcelJS.Fill & RuntimeFill) | undefined;
+  const hasVisibleFill = fillIsVisible(fill);
   const fillColor =
-    fill?.type === 'pattern' && fill.pattern === 'solid'
-      ? resolveExcelColor(fill.fgColor, themeColors)
+    hasVisibleFill && runtimeFill?.type === 'pattern' && runtimeFill.pattern === 'solid'
+      ? resolveExcelColor(runtimeFill.fgColor, themeColors)
       : undefined;
   return {
     styleId: styleId ?? styled.styleId,
+    fillType: runtimeFill?.type,
+    fillPatternType: runtimeFill?.pattern,
+    fillForegroundRaw: describeExcelColor(runtimeFill?.fgColor),
+    fillBackgroundRaw: describeExcelColor(runtimeFill?.bgColor),
     fillColor,
+    hasVisibleFill,
+    fillCategory: baseFillCategory(hasVisibleFill, fillColor),
     fontColor: resolveExcelColor(styled.font?.color, themeColors),
     italic: styled.font?.italic === true,
     bold: styled.font?.bold === true,
@@ -96,4 +142,8 @@ export function isBlue(color?: string): boolean {
   if (!color) return false;
   const [red, green, blue] = rgb(color);
   return blue > red * 1.08 && blue >= green * 0.95;
+}
+
+export function isWhite(color?: string): boolean {
+  return color?.toUpperCase() === '#FFFFFF';
 }

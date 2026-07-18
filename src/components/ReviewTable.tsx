@@ -136,10 +136,23 @@ export function ReviewTable({
                           </dd>
                           <dt>Stílus</dt>
                           <dd>
-                            #{item.styleId ?? '—'}, háttér {item.fillColor ?? '—'}, betű{' '}
-                            {item.fontColor ?? '—'}, dőlt {item.italic ? 'igen' : 'nem'}, félkövér{' '}
-                            {item.bold ? 'igen' : 'nem'}
+                            #{item.styleId ?? '—'}, betű {item.fontColor ?? '—'}, dőlt{' '}
+                            {item.italic ? 'igen' : 'nem'}, félkövér {item.bold ? 'igen' : 'nem'}
                           </dd>
+                          <dt>Fill típusa</dt>
+                          <dd>{item.fillType ?? '—'}</dd>
+                          <dt>patternType</dt>
+                          <dd>{item.fillPatternType ?? '—'}</dd>
+                          <dt>fgColor nyers értéke</dt>
+                          <dd>{item.fillForegroundRaw ?? '—'}</dd>
+                          <dt>bgColor nyers értéke</dt>
+                          <dd>{item.fillBackgroundRaw ?? '—'}</dd>
+                          <dt>Van látható kitöltés</dt>
+                          <dd>{item.hasVisibleFill ? 'igen' : 'nem'}</dd>
+                          <dt>Normalizált szín</dt>
+                          <dd>{item.fillColor ?? '—'}</dd>
+                          <dt>Végső fill kategória</dt>
+                          <dd>{item.fillCategory ?? '—'}</dd>
                         </dl>
                       ))}
                     </details>

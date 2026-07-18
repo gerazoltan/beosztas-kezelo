@@ -15,9 +15,17 @@ export const HUNGARIAN_MONTHS = [
   'december',
 ] as const;
 
+export type FillCategory = 'noFill' | 'white' | 'blue' | 'green' | 'unsupported';
+
 export interface ResolvedStyle {
   styleId?: number;
+  fillType?: string;
+  fillPatternType?: string;
+  fillForegroundRaw?: string;
+  fillBackgroundRaw?: string;
   fillColor?: string;
+  hasVisibleFill?: boolean;
+  fillCategory?: FillCategory;
   fontColor?: string;
   italic: boolean;
   bold: boolean;
@@ -94,7 +102,12 @@ export interface LocalDate {
 }
 
 export type ShiftType =
-  'Nappalos 06–18' | 'Nappalos 10–22' | '24 órás szolgálat' | 'Éjszakai szolgálat' | 'KMR';
+  | 'Nappalos 06–18'
+  | 'Nappalos 07–19'
+  | 'Nappalos 10–22'
+  | '24 órás szolgálat'
+  | 'Éjszakai szolgálat'
+  | 'KMR';
 
 export interface EventTimeRange {
   start: string;

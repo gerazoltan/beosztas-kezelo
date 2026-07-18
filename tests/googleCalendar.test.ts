@@ -30,6 +30,14 @@ const twentyFourHourItem: CalendarEvent = {
   calendarTime: { start: '2026-08-31T07:00:00', end: '2026-09-01T06:59:00' },
 };
 
+const whiteTwelveItem: CalendarEvent = {
+  ...item,
+  id: 'event-white-12',
+  shiftType: 'Nappalos 07–19',
+  shiftTime: { start: '2026-08-12T07:00:00', end: '2026-08-12T19:00:00' },
+  calendarTime: { start: '2026-08-12T07:00:00', end: '2026-08-12T19:00:00' },
+};
+
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -178,6 +186,30 @@ describe('Google Naptár szolgáltatás', () => {
         dateTime: '2026-09-01T06:59:00',
         timeZone: 'Europe/Budapest',
       },
+    });
+  });
+
+  it('fehér 12 feltöltésnél a request body a 07:00–19:00 naptári időt használja', async () => {
+    let requestBody: unknown;
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_input, init) => {
+      if (typeof init?.body !== 'string') throw new Error('Hiányzó JSON request body.');
+      requestBody = JSON.parse(init.body) as unknown;
+      return Promise.resolve(response({ id: 'created-white-12', colorId: '10' }));
+    });
+
+    await new GoogleCalendarClient('token', fetcher).insertEvent('primary', whiteTwelveItem);
+
+    expect(requestBody).toMatchObject({
+      summary: 'OMSZ',
+      start: {
+        dateTime: '2026-08-12T07:00:00',
+        timeZone: 'Europe/Budapest',
+      },
+      end: {
+        dateTime: '2026-08-12T19:00:00',
+        timeZone: 'Europe/Budapest',
+      },
+      colorId: '10',
     });
   });
 

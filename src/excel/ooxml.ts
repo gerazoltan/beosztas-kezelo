@@ -1,6 +1,21 @@
 import JSZip from 'jszip';
 import type { OoxmlMetadata } from '../domain/types';
 
+const THEME_COLOR_INDEX_ORDER = [
+  'lt1',
+  'dk1',
+  'lt2',
+  'dk2',
+  'accent1',
+  'accent2',
+  'accent3',
+  'accent4',
+  'accent5',
+  'accent6',
+  'hlink',
+  'folHlink',
+] as const;
+
 function parseXml(source: string): Document {
   const document = new DOMParser().parseFromString(source, 'application/xml');
   if (document.querySelector('parsererror')) throw new Error('Érvénytelen OOXML XML-rész.');
@@ -22,13 +37,18 @@ async function readThemeColors(zip: JSZip): Promise<string[]> {
   const themeSource = await zip.file('xl/theme/theme1.xml')?.async('string');
   if (!themeSource) return [];
   const document = parseXml(themeSource);
-  const scheme = document.getElementsByTagName('a:clrScheme')[0];
+  const scheme = Array.from(document.getElementsByTagName('*')).find(
+    (entry) => entry.localName === 'clrScheme',
+  );
   if (!scheme) return [];
-  return Array.from(scheme.children).map((entry) => {
-    const color = entry.firstElementChild;
-    const value = color?.getAttribute('lastClr') ?? color?.getAttribute('val') ?? '';
-    return value ? `#${value.slice(-6).toUpperCase()}` : '';
-  });
+  const colorsByName = new Map(
+    Array.from(scheme.children).map((entry) => {
+      const color = entry.firstElementChild;
+      const value = color?.getAttribute('lastClr') ?? color?.getAttribute('val') ?? '';
+      return [entry.localName, value ? `#${value.slice(-6).toUpperCase()}` : ''] as const;
+    }),
+  );
+  return THEME_COLOR_INDEX_ORDER.map((name) => colorsByName.get(name) ?? '');
 }
 
 async function readStyleIds(zip: JSZip): Promise<Map<string, number>> {

@@ -9,8 +9,38 @@ import {
 } from '../src/excel/workbookParser';
 import { AppError } from '../src/domain/errors';
 import { workbookBuffer } from './fixtures/syntheticWorkbook';
+import { extractOoxmlMetadata } from '../src/excel/ooxml';
 
 describe('Excel parser', () => {
+  it('az OOXML theme-indexeket nem az XML gyermekelemeinek sötét-világos sorrendjében értelmezi', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'xl/theme/theme1.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+          <a:themeElements>
+            <a:clrScheme name="Teszt">
+              <a:dk1><a:srgbClr val="000000"/></a:dk1>
+              <a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
+              <a:dk2><a:srgbClr val="44546A"/></a:dk2>
+              <a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>
+              <a:accent1><a:srgbClr val="4472C4"/></a:accent1>
+              <a:accent2><a:srgbClr val="ED7D31"/></a:accent2>
+              <a:accent3><a:srgbClr val="A5A5A5"/></a:accent3>
+              <a:accent4><a:srgbClr val="FFC000"/></a:accent4>
+              <a:accent5><a:srgbClr val="5B9BD5"/></a:accent5>
+              <a:accent6><a:srgbClr val="70AD47"/></a:accent6>
+              <a:hlink><a:srgbClr val="0563C1"/></a:hlink>
+              <a:folHlink><a:srgbClr val="954F72"/></a:folHlink>
+            </a:clrScheme>
+          </a:themeElements>
+        </a:theme>`,
+    );
+    const metadata = await extractOoxmlMetadata(await zip.generateAsync({ type: 'arraybuffer' }));
+
+    expect(metadata.themeColors.slice(0, 4)).toEqual(['#FFFFFF', '#000000', '#E7E6E6', '#44546A']);
+  });
+
   it('felismeri a havi lapokat, és kizárja a Munka* segédlapot', async () => {
     const session = await parseWorkbook(await workbookBuffer(), 'minta.xlsx');
     expect(session.months.map((month) => month.sheetName)).toEqual(['Augusztus']);

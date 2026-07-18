@@ -60,11 +60,43 @@ describe('szolgálatértelmező', () => {
     });
   });
 
-  it('ismeretlen 12 bizonytalan és nem exportálható', () => {
+  it('kitöltés nélküli 12-ből 07:00–19:00 szolgálatot készít', () => {
     const result = interpretSchedule([entry(1, '12')], { legend });
-    expect(result.events).toHaveLength(0);
-    expect(result.rows[0]?.status).toBe('Bizonytalan');
+    expect(result.events[0]).toMatchObject({
+      summary: 'OMSZ',
+      shiftType: 'Nappalos 07–19',
+      shiftTime: { start: '2026-08-01T07:00:00', end: '2026-08-01T19:00:00' },
+      calendarTime: { start: '2026-08-01T07:00:00', end: '2026-08-01T19:00:00' },
+    });
+    expect(result.rows[0]).toMatchObject({
+      status: 'Exportálható',
+      note: 'Fehér vagy kitöltés nélküli 12 felismerve.',
+      diagnostics: [expect.objectContaining({ fillCategory: 'noFill' })],
+    });
   });
+
+  it('más, nem támogatott színű 12 bizonytalan és nem exportálható', () => {
+    const result = interpretSchedule(
+      [entry(1, '12', { style: { fillColor: '#F4CCCC', hasVisibleFill: true } })],
+      { legend },
+    );
+    expect(result.events).toHaveLength(0);
+    expect(result.rows[0]).toMatchObject({
+      status: 'Bizonytalan',
+      diagnostics: [expect.objectContaining({ fillCategory: 'unsupported' })],
+    });
+  });
+
+  it.each(['7', '5', '17', 'x', ''])(
+    'a fehér vagy kitöltés nélküli %s nem válik önálló 07:00–19:00 szolgálattá',
+    (marker) => {
+      const result = interpretSchedule([entry(1, marker, { style: { hasVisibleFill: false } })], {
+        legend,
+      });
+      expect(result.events).toHaveLength(0);
+      expect(result.rows.some((row) => row.shiftType === 'Nappalos 07–19')).toBe(false);
+    },
+  );
 
   it('17–7 esetén a listában 24 órát, a naptárban 06:59-es befejezést használ', () => {
     const result = interpretSchedule([entry(1, '17'), entry(2, '7')], { legend });

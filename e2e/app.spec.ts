@@ -45,6 +45,19 @@ async function twentyFourHourWorkbook(): Promise<Buffer> {
   return Buffer.from(content);
 }
 
+async function whiteTwelveWorkbook(): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Augusztus');
+  sheet.getCell('B2').value = '2026. augusztus';
+  sheet.getCell('B4').value = 'Név';
+  for (let day = 1; day <= 31; day += 1) sheet.getCell(4, 3 + (day - 1) * 2).value = day;
+  sheet.getCell('B5').value = 'Teszt Elek';
+  sheet.getCell('B6').value = 'Összesen';
+  sheet.getCell('C5').value = 12;
+  const content = await workbook.xlsx.writeBuffer();
+  return Buffer.from(content);
+}
+
 function processScheduleButton(page: Page) {
   return page.getByRole('button', { name: 'Beosztás feldolgozása' });
 }
@@ -224,6 +237,76 @@ test('a 17–7 szolgálat listában 24 órás, ICS-ben és Google-ben 06:59-ig t
     summary: 'OMSZ',
     start: { dateTime: '2026-08-03T07:00:00', timeZone: 'Europe/Budapest' },
     end: { dateTime: '2026-08-04T06:59:00', timeZone: 'Europe/Budapest' },
+  });
+});
+
+test('a kitöltés nélküli 12 a listában, ICS-ben és Google-ben 07:00–19:00 szolgálat', async ({
+  page,
+}) => {
+  await installGoogleIdentity(page);
+  await routeWritableCalendar(page);
+  let eventRequestBody: unknown;
+  await page.route(
+    'https://www.googleapis.com/calendar/v3/calendars/primary/events**',
+    async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ items: [] }),
+        });
+        return;
+      }
+      eventRequestBody = JSON.parse(route.request().postData() ?? 'null') as unknown;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'created-white-12', colorId: '10' }),
+      });
+    },
+  );
+
+  await page.goto('.');
+  await page.getByTestId('file-input').setInputFiles({
+    name: 'feher-12.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: await whiteTwelveWorkbook(),
+  });
+  await page.getByLabel('Dolgozó').selectOption('teszt elek');
+  await processScheduleButton(page).click();
+
+  const serviceRow = page.locator('tbody tr').filter({ hasText: 'Nappalos 07–19' });
+  await expect(serviceRow).toHaveCount(1);
+  await expect(serviceRow.locator('td[data-label="Kezdés"]')).toHaveText('07:00');
+  await expect(serviceRow.locator('td[data-label="Befejezés"]')).toHaveText('19:00');
+  await expect(serviceRow.locator('td[data-label="Esemény"]')).toHaveText('OMSZ');
+  await expect(serviceRow.getByText('Exportálható', { exact: true })).toBeVisible();
+  await expect(serviceRow.getByText('Fehér vagy kitöltés nélküli 12 felismerve.')).toBeVisible();
+  await serviceRow.getByText('Technikai részletek').click();
+  const selectedDiagnostic = serviceRow.locator('dl').filter({ hasText: 'C5' });
+  await expect(selectedDiagnostic.getByText('Van látható kitöltés')).toBeVisible();
+  await expect(selectedDiagnostic.getByText('nem', { exact: true })).toBeVisible();
+  await expect(selectedDiagnostic.getByText('Végső fill kategória')).toBeVisible();
+  await expect(selectedDiagnostic.getByText('noFill', { exact: true })).toBeVisible();
+
+  const [download] = await Promise.all([page.waitForEvent('download'), icsButton(page).click()]);
+  const downloadStream = await download.createReadStream();
+  downloadStream.setEncoding('utf8');
+  const chunks: string[] = [];
+  for await (const chunk of downloadStream as AsyncIterable<unknown>) {
+    if (typeof chunk !== 'string') throw new Error('Az ICS-letöltés nem UTF-8 szöveget adott.');
+    chunks.push(chunk);
+  }
+  const icsContent = chunks.join('');
+  expect(icsContent).toContain('DTSTART;TZID=Europe/Budapest:20260801T070000');
+  expect(icsContent).toContain('DTEND;TZID=Europe/Budapest:20260801T190000');
+
+  await page.getByRole('button', { name: 'Google-bejelentkezés' }).click();
+  await uploadGoogleEvents(page, 1);
+  await expect(page.getByRole('heading', { name: 'Sikeres naptárfeltöltés' })).toBeVisible();
+  expect(eventRequestBody).toMatchObject({
+    summary: 'OMSZ',
+    start: { dateTime: '2026-08-01T07:00:00', timeZone: 'Europe/Budapest' },
+    end: { dateTime: '2026-08-01T19:00:00', timeZone: 'Europe/Budapest' },
+    colorId: '10',
   });
 });
 

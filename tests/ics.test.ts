@@ -81,6 +81,36 @@ describe('ICS-generátor', () => {
     expect(content).not.toContain('DTEND;TZID=Europe/Budapest:20260804T070000');
   });
 
+  it('a fehér 12 szolgálatot 07:00–19:00 között exportálja', () => {
+    const diagnostic = {
+      address: 'C5',
+      rawValue: '12',
+      displayedText: '12',
+      isMerged: false,
+      hasVisibleFill: false,
+      italic: false,
+      bold: false,
+    };
+    const result = interpretSchedule(
+      [
+        {
+          date: { year: 2026, month: 8, day: 1 },
+          group: { day: 1, startColumn: 3, endColumn: 4, valid: true },
+          kind: 'single',
+          marker: '12',
+          normalizedMarker: '12',
+          diagnostics: [diagnostic],
+          selectedDiagnostic: diagnostic,
+        },
+      ],
+      { legend: { blue12: [], green12: [] } },
+    );
+
+    const content = buildIcs(result.events);
+    expect(content).toContain('DTSTART;TZID=Europe/Budapest:20260801T070000');
+    expect(content).toContain('DTEND;TZID=Europe/Budapest:20260801T190000');
+  });
+
   it('escape-eli a különleges karaktereket és UTF-8 bájthosszon hajtogat', () => {
     expect(escapeIcsText('árvíz, sor; \\\núj')).toBe('árvíz\\, sor\\; \\\\\\núj');
     const folded = foldIcsLine(`DESCRIPTION:${'árvíztűrő '.repeat(12)}`);
@@ -100,6 +130,8 @@ describe('ICS-generátor', () => {
       rawValue: '12',
       displayedText: '12',
       isMerged: false,
+      fillColor: '#F4CCCC',
+      hasVisibleFill: true,
       italic: false,
       bold: false,
     };

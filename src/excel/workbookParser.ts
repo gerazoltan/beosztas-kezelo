@@ -160,6 +160,7 @@ function readEmployees(
 function styleEquals(first: ResolvedStyle, second: ResolvedStyle): boolean {
   return (
     first.fillColor === second.fillColor &&
+    first.hasVisibleFill === second.hasVisibleFill &&
     first.fontColor === second.fontColor &&
     first.italic === second.italic &&
     first.bold === second.bold
