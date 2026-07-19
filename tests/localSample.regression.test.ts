@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { WorkbookSession } from '../src/domain/types';
+import type { ReviewRow, WorkbookSession } from '../src/domain/types';
 import { parseWorkbook } from '../src/excel/workbookParser';
 import {
   readMonthEntries,
@@ -13,6 +13,7 @@ import { AppError } from '../src/domain/errors';
 import { buildDailyServicePatterns } from '../src/services/dailyServiceInference';
 import { buildIcs } from '../src/services/ics';
 import { GoogleCalendarClient } from '../src/services/googleCalendar';
+import { isBlue, isGreen } from '../src/excel/colors';
 
 const sampleDirectory = resolve(process.cwd(), 'local-samples');
 const hasSamples = existsSync(sampleDirectory);
@@ -74,6 +75,114 @@ describe('helyi, nem követett Excel-minta regresszió', () => {
           'KMR',
         ]),
       );
+    },
+  );
+
+  it.skipIf(!hasSamples)(
+    'a feltárt valós számos jelöléseket az általános szabályokkal hiánytalanul javítja',
+    async () => {
+      const session = await loadFirstSample();
+      let directBlueTwelveCount = 0;
+      let greenWithoutUnderlineTwelveCount = 0;
+      const greenSeventeenRows: ReviewRow[] = [];
+      const januaryCarryovers: ReviewRow[] = [];
+      const augustMonthEndSeventeen: ReviewRow[] = [];
+
+      for (const month of session.months) {
+        const worksheetSchedules = readWorksheetScheduleEntries(session, month);
+        const dailyServicePatterns = buildDailyServicePatterns(worksheetSchedules);
+        for (const worksheetSchedule of worksheetSchedules) {
+          const result = interpretSchedule(worksheetSchedule.current, {
+            previous: worksheetSchedule.previous,
+            next: worksheetSchedule.next,
+            dailyServicePatterns,
+          });
+          expect(new Set(result.events.map((item) => item.id)).size).toBe(
+            result.events.length,
+          );
+
+          for (const row of result.rows) {
+            const selected = row.diagnostics.find((diagnostic) =>
+              ['12', '17', '7'].includes(diagnostic.displayedText.trim()),
+            );
+            if (
+              row.marker === '12' &&
+              isBlue(selected?.fontColor) &&
+              row.event?.inference === undefined
+            ) {
+              directBlueTwelveCount += 1;
+              expect(row.status).toBe('Exportálható');
+              expect(row.serviceCategory).toBe('6-os kocsi');
+              expect(row.event?.shiftTime.start).toContain('T06:00:00');
+              expect(row.event?.shiftTime.end).toContain('T18:00:00');
+            }
+            if (
+              row.marker === '12' &&
+              isGreen(selected?.fontColor) &&
+              selected?.underline === false
+            ) {
+              greenWithoutUnderlineTwelveCount += 1;
+              expect(row.status).toBe('Exportálható');
+              expect(row.serviceCategory).toBe('10-es kocsi');
+              expect(row.event?.shiftTime.start).toContain('T10:00:00');
+              expect(row.event?.shiftTime.end).toContain('T22:00:00');
+            }
+            if (row.marker === '17' && isGreen(selected?.fontColor)) {
+              greenSeventeenRows.push(row);
+            }
+            if (
+              month.month === 1 &&
+              row.date.day === 1 &&
+              row.marker === '7' &&
+              row.event?.specialKind === 'previous-month-carryover-partial'
+            ) {
+              januaryCarryovers.push(row);
+            }
+            if (
+              month.month === 8 &&
+              row.date.day === 31 &&
+              row.marker === '17' &&
+              row.status === 'Exportálható'
+            ) {
+              augustMonthEndSeventeen.push(row);
+            }
+          }
+        }
+      }
+
+      expect(directBlueTwelveCount).toBe(58);
+      expect(greenWithoutUnderlineTwelveCount).toBe(3);
+      expect(greenSeventeenRows).toHaveLength(1);
+      expect(greenSeventeenRows[0]).toMatchObject({
+        status: 'Exportálható',
+        serviceCategory: 'Parti szolgálat',
+        serviceResolution: {
+          formattingCorrectionApplied: true,
+          dailyInferenceApplied: true,
+        },
+      });
+      expect(greenSeventeenRows[0]?.technicalNote).toContain(
+        'Esetszolgálat már szerepelt, Parti szolgálat viszont hiányzott',
+      );
+      expect(januaryCarryovers).toHaveLength(2);
+      for (const row of januaryCarryovers) {
+        expect(row.event).toMatchObject({
+          shiftTime: {
+            start: '2026-01-01T00:00:00',
+            end: '2026-01-01T06:59:00',
+          },
+        });
+      }
+      expect(augustMonthEndSeventeen).toHaveLength(2);
+      expect(
+        augustMonthEndSeventeen.map((row) => row.serviceCategory).sort(),
+      ).toEqual(['Esetszolgálat', 'Parti szolgálat']);
+      for (const row of augustMonthEndSeventeen) {
+        expect(row.event).toMatchObject({
+          shiftTime: { end: '2026-09-01T07:00:00' },
+          calendarTime: { end: '2026-09-01T06:59:00' },
+        });
+      }
     },
   );
 

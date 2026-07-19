@@ -108,7 +108,7 @@ describe('szolgálatértelmező', () => {
     ], {});
     expect(result.events[0]).toMatchObject({
       shiftType: 'Nappalos 06–18',
-      serviceCategory: 'Nappalos 06–18',
+      serviceCategory: '6-os kocsi',
       shiftTime: { start: '2026-08-01T06:00:00', end: '2026-08-01T18:00:00' },
     });
   });
@@ -133,12 +133,20 @@ describe('szolgálatértelmező', () => {
     expect(result.events[0]?.serviceCategory).toBe('Parti szolgálat');
   });
 
-  it('zöld, de nem aláhúzott 12 bizonytalan', () => {
+  it('zöld, de nem aláhúzott 12 is 10-es kocsi', () => {
     const result = interpretSchedule([
       entry(1, '12', { style: { fontColor: '#008000', underline: false } }),
     ], {});
-    expect(result.events).toHaveLength(0);
-    expect(result.rows[0]?.status).toBe('Bizonytalan');
+    expect(result.events[0]).toMatchObject({
+      shiftType: 'Nappalos 10–22',
+      serviceCategory: '10-es kocsi',
+      shiftTime: { start: '2026-08-01T10:00:00', end: '2026-08-01T22:00:00' },
+    });
+    expect(result.rows[0]).toMatchObject({
+      status: 'Exportálható',
+      technicalNote:
+        'Zöld 12 felismerve 10-es kocsiként. Az aláhúzás hiányzik, de a zöld betűszín alapján a szolgálat egyértelmű.',
+    });
   });
 
   it.each([

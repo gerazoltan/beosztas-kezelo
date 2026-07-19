@@ -91,7 +91,7 @@ export function buildIcs(events: CalendarEvent[], generatedAt = new Date()): str
       `DTSTART;TZID=Europe/Budapest:${formatIcsLocal(item.calendarTime.start)}`,
       `DTEND;TZID=Europe/Budapest:${formatIcsLocal(item.calendarTime.end)}`,
       `SUMMARY:${escapeIcsText(item.summary)}`,
-      `DESCRIPTION:${escapeIcsText(calendarEventDescription(item))}`,
+      `DESCRIPTION:${escapeIcsText(calendarEventDescription(item, 'ics'))}`,
       'END:VEVENT',
     );
   }

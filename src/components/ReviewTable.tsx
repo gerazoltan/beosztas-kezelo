@@ -103,7 +103,10 @@ export function ReviewTable({
                   <td data-label="Szolgálati jelleg">
                     {row.serviceCategory
                       ? `${row.serviceCategory}${
-                          row.dailyInference?.correctionApplied ? ' – következtetett' : ''
+                          row.dailyInference?.correctionApplied ||
+                          row.serviceResolution?.dailyInferenceApplied
+                            ? ' – következtetett'
+                            : ''
                         }`
                       : '—'}
                   </td>
@@ -180,6 +183,38 @@ export function ReviewTable({
                           <dd>
                             {time(row.dailyInference.finalTime.start)}–
                             {time(row.dailyInference.finalTime.end)}
+                          </dd>
+                        </dl>
+                      )}
+                      {row.serviceResolution && (
+                        <dl>
+                          <dt>Eredeti szolgálati kategória</dt>
+                          <dd>{row.serviceResolution.originalServiceCategory}</dd>
+                          <dt>Végső szolgálati kategória</dt>
+                          <dd>{row.serviceResolution.finalServiceCategory ?? '—'}</dd>
+                          <dt>Formázási korrekció történt</dt>
+                          <dd>
+                            {row.serviceResolution.formattingCorrectionApplied ? 'igen' : 'nem'}
+                          </dd>
+                          <dt>Napi összeállításból következtetve</dt>
+                          <dd>{row.serviceResolution.dailyInferenceApplied ? 'igen' : 'nem'}</dd>
+                          <dt>Feltételezett hónaphatár-párosítás</dt>
+                          <dd>{row.serviceResolution.assumedBoundaryPairing ? 'igen' : 'nem'}</dd>
+                          <dt>Párosítás forrása</dt>
+                          <dd>{row.serviceResolution.pairingSource ?? 'nem szükséges'}</dd>
+                          <dt>Tényleges vagy feltételezett párosító cella</dt>
+                          <dd>{row.serviceResolution.pairingCell ?? 'nem szükséges'}</dd>
+                          <dt>Végső listaidő</dt>
+                          <dd>
+                            {row.serviceResolution.finalShiftTime
+                              ? `${row.serviceResolution.finalShiftTime.start} – ${row.serviceResolution.finalShiftTime.end}`
+                              : '—'}
+                          </dd>
+                          <dt>Végső naptáridő</dt>
+                          <dd>
+                            {row.serviceResolution.finalCalendarTime
+                              ? `${row.serviceResolution.finalCalendarTime.start} – ${row.serviceResolution.finalCalendarTime.end}`
+                              : '—'}
                           </dd>
                         </dl>
                       )}

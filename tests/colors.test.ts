@@ -153,7 +153,7 @@ describe('szín- és stílusfeloldás', () => {
         italic: true,
         bold: false,
       }),
-    ).toBe('unknown');
+    ).toBe('tenCar');
     expect(
       classifyTwelve({
         fontColor: '#FF0000',

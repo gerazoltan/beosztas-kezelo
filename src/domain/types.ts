@@ -110,6 +110,7 @@ export type ShiftType =
   | 'Nappalos 10–22'
   | '24 órás szolgálat'
   | 'Éjszakai szolgálat'
+  | 'Előző hónapról áthúzódó szolgálat'
   | 'KMR';
 
 export type ServiceCategory =
@@ -125,23 +126,31 @@ export type InferredTwelveKind = 'blue' | 'tenCar';
 export interface DailyServicePattern {
   date: LocalDate;
   partyTwentyFourHourCount: number;
+  emergencyTwentyFourHourCount: number;
   blueTwelveCount: number;
   tenCarTwelveCount: number;
   blackTwelveCandidateCount: number;
+  greenSeventeenCandidateCount: number;
+  conflictingSeventeenCount: number;
   conflictingServiceMarkerCount: number;
   correction?: {
     candidateAddress: string;
     target: InferredTwelveKind;
     explanation: string;
   };
+  seventeenCorrection?: {
+    candidateAddress: string;
+    target: 'party' | 'emergency';
+    explanation: string;
+  };
 }
 
 export interface ServiceInference {
   source: 'daily-service-pattern';
-  target: InferredTwelveKind;
+  target: InferredTwelveKind | 'party' | 'emergency';
   explanation: string;
-  originalServiceCategory: 'Parti szolgálat';
-  originalShiftType: 'Nappalos 07–19';
+  originalServiceCategory?: ServiceCategory | 'Nem meghatározható';
+  originalShiftType?: ShiftType;
 }
 
 export interface EventTimeRange {
@@ -171,6 +180,7 @@ export interface CalendarEvent {
   calendarTime: EventTimeRange;
   timeZone: 'Europe/Budapest';
   inference?: ServiceInference;
+  specialKind?: 'previous-month-carryover-partial';
 }
 
 export type ReviewStatus =
@@ -193,6 +203,18 @@ export interface GoogleEventState {
   technicalDetails?: string;
 }
 
+export interface ServiceResolutionTechnicalDetails {
+  originalServiceCategory: ServiceCategory | 'Nem meghatározható';
+  finalServiceCategory?: ServiceCategory;
+  formattingCorrectionApplied: boolean;
+  dailyInferenceApplied: boolean;
+  assumedBoundaryPairing: boolean;
+  pairingSource?: 'actual' | 'assumed' | 'previous-month-carryover';
+  pairingCell?: string;
+  finalShiftTime?: EventTimeRange;
+  finalCalendarTime?: EventTimeRange;
+}
+
 export interface ReviewRow {
   id: string;
   date: LocalDate;
@@ -208,6 +230,7 @@ export interface ReviewRow {
     address: string;
   }>;
   dailyInference?: DailyInferenceTechnicalDetails;
+  serviceResolution?: ServiceResolutionTechnicalDetails;
   technicalNote?: string;
   diagnostics: CellDiagnostic[];
   event?: CalendarEvent;

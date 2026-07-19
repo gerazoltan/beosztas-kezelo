@@ -1,7 +1,13 @@
 import type { CalendarEvent, ReviewStatus } from '../domain/types';
 import { AppError, type AppErrorCode } from '../domain/errors';
 import { calendarEventDescription } from './calendarEventDescription';
-import { instantToLocal, zonedLocalToInstant } from './dates';
+import {
+  addDays,
+  instantToLocal,
+  localDateKey,
+  localDateTime,
+  zonedLocalToInstant,
+} from './dates';
 
 const API_ROOT = 'https://www.googleapis.com/calendar/v3';
 const GOOGLE_EVENT_COLOR_ID = '10';
@@ -118,6 +124,57 @@ export class GoogleCalendarClient {
     });
   }
 
+  async hasPreviousMonthCarryoverOverlap(
+    calendarId: string,
+    item: CalendarEvent,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    if (item.specialKind !== 'previous-month-carryover-partial') return false;
+
+    const [year, month, day] = item.calendarTime.start
+      .slice(0, 10)
+      .split('-')
+      .map(Number);
+    if (!year || !month || !day) return false;
+    const partialDate = { year, month, day };
+    const previousDate = addDays(partialDate, -1);
+    const partialStart = zonedLocalToInstant(item.calendarTime.start);
+    const partialEnd = zonedLocalToInstant(item.calendarTime.end);
+    const queryStart = zonedLocalToInstant(localDateTime(previousDate, '00:00'));
+    const query = new URLSearchParams({
+      timeMin: new Date(queryStart.getTime() - 1000).toISOString(),
+      timeMax: new Date(partialEnd.getTime() + 1000).toISOString(),
+      singleEvents: 'true',
+      showDeleted: 'false',
+    });
+    const response = await this.request<EventsResponse>(
+      `/calendars/${encodeURIComponent(calendarId)}/events?${query.toString()}`,
+      { signal },
+    );
+    const previousDateKey = localDateKey(previousDate);
+    const partialDateKey = localDateKey(partialDate);
+
+    return (response.items ?? []).some((candidate) => {
+      const startValue = candidate.start?.dateTime;
+      const endValue = candidate.end?.dateTime;
+      if (!startValue || !endValue || candidate.summary !== 'OMSZ') return false;
+      const candidateStartLocal = instantToLocal(startValue);
+      const candidateEndLocal = instantToLocal(endValue);
+      const acceptedEnd =
+        candidateEndLocal === `${partialDateKey}T06:59:00` ||
+        candidateEndLocal === `${partialDateKey}T07:00:00`;
+      if (!acceptedEnd || !candidateStartLocal.startsWith(`${previousDateKey}T`)) {
+        return false;
+      }
+      const candidateStart = new Date(startValue).getTime();
+      const candidateEnd = new Date(endValue).getTime();
+      return (
+        candidateStart < partialEnd.getTime() &&
+        candidateEnd > partialStart.getTime()
+      );
+    });
+  }
+
   async insertEvent(
     calendarId: string,
     item: CalendarEvent,
@@ -146,12 +203,32 @@ export class GoogleCalendarClient {
       if (options.signal?.aborted) break;
       options.onStart?.(item);
       let result: GoogleWriteResult;
+      let carryoverOverlap: boolean | undefined;
       try {
-        if (await this.isDuplicate(calendarId, item, options.signal)) {
+        carryoverOverlap =
+          item.specialKind === 'previous-month-carryover-partial'
+            ? await this.hasPreviousMonthCarryoverOverlap(
+                calendarId,
+                item,
+                options.signal,
+              )
+            : undefined;
+        const duplicate =
+          carryoverOverlap === undefined
+            ? await this.isDuplicate(calendarId, item, options.signal)
+            : carryoverOverlap ||
+              (await this.isDuplicate(calendarId, item, options.signal));
+        if (duplicate) {
           result = {
             eventId: item.id,
             status: 'Már szerepel a naptárban',
-            message: 'Azonos nevű és időpontú esemény már létezik.',
+            message: carryoverOverlap
+              ? 'Már szerepel a naptárban az előző hónapról áthúzódó teljes szolgálat.'
+              : 'Azonos nevű és időpontú esemény már létezik.',
+            technicalDetails:
+              carryoverOverlap === undefined
+                ? undefined
+                : 'Átfedő előző havi teljes esemény található: igen.',
           };
         } else {
           const created = await this.insertEvent(calendarId, item, options.signal);
@@ -162,6 +239,10 @@ export class GoogleCalendarClient {
             message: colorConfirmed
               ? 'Az eseményt a Google Naptár a zöld Basil (10) színnel létrehozta.'
               : 'Az esemény létrejött, de a Google nem a kért zöld Basil (10) színt igazolta vissza.',
+            technicalDetails:
+              carryoverOverlap === undefined
+                ? undefined
+                : 'Átfedő előző havi teljes esemény található: nem.',
           };
         }
       } catch (error) {

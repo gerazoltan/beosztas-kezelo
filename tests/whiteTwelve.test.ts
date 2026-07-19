@@ -103,7 +103,7 @@ describe('betűformázás-alapú 12 integrációja', () => {
     });
     expect(result.rows.find((row) => row.date.day === 8)).toMatchObject({
       status: 'Exportálható',
-      serviceCategory: 'Nappalos 06–18',
+      serviceCategory: '6-os kocsi',
       event: {
         shiftTime: { start: '2026-08-08T06:00:00', end: '2026-08-08T18:00:00' },
       },
@@ -115,7 +115,13 @@ describe('betűformázás-alapú 12 integrációja', () => {
         shiftTime: { start: '2026-08-09T10:00:00', end: '2026-08-09T22:00:00' },
       },
     });
-    expect(result.rows.find((row) => row.date.day === 10)?.status).toBe('Bizonytalan');
+    expect(result.rows.find((row) => row.date.day === 10)).toMatchObject({
+      status: 'Exportálható',
+      serviceCategory: '10-es kocsi',
+      event: {
+        shiftTime: { start: '2026-08-10T10:00:00', end: '2026-08-10T22:00:00' },
+      },
+    });
     expect(result.rows.find((row) => row.date.day === 11)?.status).toBe('Kizárva');
 
     const noFillDiagnostic = result.rows

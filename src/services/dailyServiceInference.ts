@@ -4,6 +4,7 @@ import type {
   ReviewRow,
 } from '../domain/types';
 import type { EmployeeScheduleEntries } from '../excel/dayEntries';
+import { isGreen } from '../excel/colors';
 import { normalizeMarker } from '../utils/normalize';
 import { localDateKey } from './dates';
 import { classifyTwelve, interpretSchedule } from './shifts';
@@ -11,9 +12,12 @@ import { classifyTwelve, interpretSchedule } from './shifts';
 interface DailyAccumulator {
   date: LocalDate;
   partyTwentyFourHourCount: number;
+  emergencyTwentyFourHourCount: number;
   blueTwelveAddresses: Set<string>;
   tenCarTwelveAddresses: Set<string>;
   blackTwelveCandidateAddresses: Set<string>;
+  greenSeventeenCandidateAddresses: Set<string>;
+  conflictingSeventeenCount: number;
   conflictingServiceMarkerCount: number;
 }
 
@@ -29,6 +33,12 @@ function twelveAddress(row: ReviewRow): string | undefined {
   )?.address;
 }
 
+function markerAddress(row: ReviewRow, marker: string): string | undefined {
+  return row.diagnostics.find(
+    (diagnostic) => normalizeMarker(diagnostic.displayedText) === marker,
+  )?.address;
+}
+
 export function buildDailyServicePatterns(
   schedules: EmployeeScheduleEntries[],
 ): ReadonlyMap<string, DailyServicePattern> {
@@ -41,9 +51,12 @@ export function buildDailyServicePatterns(
         daily.set(key, {
           date: entry.date,
           partyTwentyFourHourCount: 0,
+          emergencyTwentyFourHourCount: 0,
           blueTwelveAddresses: new Set(),
           tenCarTwelveAddresses: new Set(),
           blackTwelveCandidateAddresses: new Set(),
+          greenSeventeenCandidateAddresses: new Set(),
+          conflictingSeventeenCount: 0,
           conflictingServiceMarkerCount: 0,
         });
       }
@@ -62,10 +75,13 @@ export function buildDailyServicePatterns(
       if (
         row.status === 'Exportálható' &&
         row.shiftType === '24 órás szolgálat' &&
-        row.serviceCategory === 'Parti szolgálat' &&
         row.event?.shiftTime.start.slice(0, 10) === localDateKey(row.date)
       ) {
-        accumulator.partyTwentyFourHourCount += 1;
+        if (row.serviceCategory === 'Parti szolgálat') {
+          accumulator.partyTwentyFourHourCount += 1;
+        } else if (row.serviceCategory === 'Esetszolgálat') {
+          accumulator.emergencyTwentyFourHourCount += 1;
+        }
       }
 
       if (normalizeMarker(row.marker) === '12') {
@@ -78,6 +94,23 @@ export function buildDailyServicePatterns(
           if (kind === 'blue') accumulator.blueTwelveAddresses.add(address);
           else if (kind === 'tenCar') accumulator.tenCarTwelveAddresses.add(address);
           else if (kind === 'party') accumulator.blackTwelveCandidateAddresses.add(address);
+        }
+      }
+
+      if (normalizeMarker(row.marker) === '17') {
+        const address = markerAddress(row, '17');
+        const diagnostic = address
+          ? row.diagnostics.find((item) => item.address === address)
+          : undefined;
+        if (
+          address &&
+          row.status === 'Bizonytalan' &&
+          isGreen(diagnostic?.fontColor)
+        ) {
+          accumulator.greenSeventeenCandidateAddresses.add(address);
+        }
+        if (row.status === 'Bizonytalan' || row.status === 'Hibás párosítás') {
+          accumulator.conflictingSeventeenCount += 1;
         }
       }
 
@@ -95,6 +128,8 @@ export function buildDailyServicePatterns(
       const blueTwelveCount = accumulator.blueTwelveAddresses.size;
       const tenCarTwelveCount = accumulator.tenCarTwelveAddresses.size;
       const blackTwelveCandidateCount = accumulator.blackTwelveCandidateAddresses.size;
+      const greenSeventeenCandidateCount =
+        accumulator.greenSeventeenCandidateAddresses.size;
       const candidateAddress = [...accumulator.blackTwelveCandidateAddresses][0];
       const safeBase =
         accumulator.partyTwentyFourHourCount === 1 &&
@@ -117,17 +152,47 @@ export function buildDailyServicePatterns(
                   'A napi 24 órás Parti szolgálat és a 10-es kocsi mellett hiányzott a 6-os kocsi. A fekete 12 ezért elírt kék 12-ként, 06:00–18:00 szolgálatként lett felismerve.',
               }
             : undefined;
+      const greenSeventeenAddress =
+        [...accumulator.greenSeventeenCandidateAddresses][0];
+      const seventeenCorrection =
+        greenSeventeenCandidateCount === 1 &&
+        accumulator.conflictingSeventeenCount === 1 &&
+        greenSeventeenAddress !== undefined &&
+        accumulator.emergencyTwentyFourHourCount === 1 &&
+        accumulator.partyTwentyFourHourCount === 0
+          ? {
+              candidateAddress: greenSeventeenAddress,
+              target: 'party' as const,
+              explanation:
+                'A zöld 17 formázási hibaként lett felismerve. Az adott napon Esetszolgálat már szerepelt, Parti szolgálat viszont hiányzott, ezért a jelölés Parti 24 órás szolgálatként lett értelmezve.',
+            }
+          : greenSeventeenCandidateCount === 1 &&
+              accumulator.conflictingSeventeenCount === 1 &&
+              greenSeventeenAddress !== undefined &&
+              accumulator.partyTwentyFourHourCount === 1 &&
+              accumulator.emergencyTwentyFourHourCount === 0
+            ? {
+                candidateAddress: greenSeventeenAddress,
+                target: 'emergency' as const,
+                explanation:
+                  'A zöld 17 formázási hibaként lett felismerve. Az adott napon Parti szolgálat már szerepelt, Esetszolgálat viszont hiányzott, ezért a jelölés Esetszolgálatként lett értelmezve.',
+              }
+            : undefined;
 
       return [
         key,
         {
           date: accumulator.date,
           partyTwentyFourHourCount: accumulator.partyTwentyFourHourCount,
+          emergencyTwentyFourHourCount: accumulator.emergencyTwentyFourHourCount,
           blueTwelveCount,
           tenCarTwelveCount,
           blackTwelveCandidateCount,
+          greenSeventeenCandidateCount,
+          conflictingSeventeenCount: accumulator.conflictingSeventeenCount,
           conflictingServiceMarkerCount: accumulator.conflictingServiceMarkerCount,
           correction,
+          seventeenCorrection,
         },
       ];
     }),
