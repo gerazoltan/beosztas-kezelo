@@ -250,9 +250,11 @@ describe('szolgálatértelmező', () => {
     const current = entry(30, '5', { month: 9 });
     const next = entry(1, '7', { month: 10 });
     const result = interpretSchedule([current], { next });
+    expect(result.events).toHaveLength(1);
     expect(result.events[0]).toMatchObject({
       serviceCategory: 'Parti szolgálat',
-      calendarTime: { start: '2026-09-30T19:00:00', end: '2026-10-01T07:00:00' },
+      shiftTime: { start: '2026-09-30T19:00:00', end: '2026-10-01T07:00:00' },
+      calendarTime: { start: '2026-09-30T19:00:00', end: '2026-10-01T06:59:00' },
     });
   });
 

@@ -15,7 +15,7 @@ import type {
 } from '../domain/types';
 import { isBlack, isBlue, isGreen, isRed } from '../excel/colors';
 import { normalizeMarker } from '../utils/normalize';
-import { addDays, localDateKey, localDateTime } from './dates';
+import { addDays, daysInMonth, localDateKey, localDateTime } from './dates';
 
 const NON_SERVICE_MARKERS = new Set([
   '',
@@ -104,6 +104,7 @@ interface RowMetadata {
   timeRule: string;
   pairingReferences?: ReviewRow['pairingReferences'];
   dailyInference?: DailyInferenceTechnicalDetails;
+  technicalNote?: string;
 }
 
 function rowForEvent(
@@ -125,9 +126,10 @@ function rowForEvent(
     pairingReferences: metadata.pairingReferences,
     dailyInference: metadata.dailyInference,
     technicalNote:
-      created.shiftType === '24 órás szolgálat'
+      metadata.technicalNote ??
+      (created.shiftType === '24 órás szolgálat'
         ? 'A naptáresemény befejezése 06:59 a jobb naptári elkülönítés érdekében.'
-        : undefined,
+        : undefined),
     diagnostics: entry.diagnostics,
     event: created,
   };
@@ -178,6 +180,10 @@ function recognizedPairingRow(
 
 function isConsecutive(first: DayEntry, second: DayEntry): boolean {
   return localDateKey(addDays(first.date, 1)) === localDateKey(second.date);
+}
+
+function isLastCalendarDay(entry: DayEntry): boolean {
+  return entry.date.day === daysInMonth(entry.date.year, entry.date.month);
 }
 
 interface MarkerOccurrence {
@@ -268,7 +274,48 @@ function pairedShift(
     };
   }
 
-  const timeRule = '5 + következő napi 7 → 19:00–másnap 07:00';
+  const monthEnd = isLastCalendarDay(startEntry);
+  const timeRule = monthEnd
+    ? 'Hónap utolsó napi 5 + következő havi 7 → 19:00–másnap 06:59'
+    : '5 + következő napi 7 → 19:00–másnap 07:00';
+  const shiftTime = timeRange(
+    localDateTime(startEntry.date, '19:00'),
+    localDateTime(endEntry.date, '07:00'),
+  );
+  return {
+    event: serviceCategory
+      ? event(
+          'OMSZ',
+          'Éjszakai szolgálat',
+          serviceCategory,
+          shiftTime,
+          monthEnd
+            ? timeRange(
+                localDateTime(startEntry.date, '19:00'),
+                localDateTime(endEntry.date, '06:59'),
+              )
+            : shiftTime,
+        )
+      : undefined,
+    timeRule,
+  };
+}
+
+function assumedMonthEndFiveShift(startOccurrence: MarkerOccurrence): PairedShift | undefined {
+  if (
+    startOccurrence.normalizedMarker !== '5' ||
+    !isLastCalendarDay(startOccurrence.entry)
+  ) {
+    return undefined;
+  }
+  const serviceKind = classifyStartingService(startOccurrence.diagnostic);
+  const serviceCategory =
+    serviceKind === 'party'
+      ? ('Parti szolgálat' as const)
+      : serviceKind === 'emergency'
+        ? ('Esetszolgálat' as const)
+        : undefined;
+  const endDate = addDays(startOccurrence.entry.date, 1);
   return {
     event: serviceCategory
       ? event(
@@ -276,12 +323,16 @@ function pairedShift(
           'Éjszakai szolgálat',
           serviceCategory,
           timeRange(
-            localDateTime(startEntry.date, '19:00'),
-            localDateTime(endEntry.date, '07:00'),
+            localDateTime(startOccurrence.entry.date, '19:00'),
+            localDateTime(endDate, '07:00'),
+          ),
+          timeRange(
+            localDateTime(startOccurrence.entry.date, '19:00'),
+            localDateTime(endDate, '06:59'),
           ),
         )
       : undefined,
-    timeRule,
+    timeRule: 'Hónap utolsó napi 5 + feltételezett következő havi 7 → 19:00–másnap 06:59',
   };
 }
 
@@ -304,9 +355,10 @@ export function interpretSchedule(
     const marker = occurrence.normalizedMarker;
     const following = entries[index + 1] ?? next;
     const closing = following ? findMarker(following, '7') : undefined;
-    const paired = closing ? pairedShift(occurrence, closing) : undefined;
+    const assumedClosing = closing ? undefined : assumedMonthEndFiveShift(occurrence);
+    const paired = closing ? pairedShift(occurrence, closing) : assumedClosing;
 
-    if (!paired || !closing) {
+    if (!paired) {
       rows.push(
         issueRow(
           entry,
@@ -326,7 +378,9 @@ export function interpretSchedule(
           `A kezdő ${marker} betűszíne nem sorolható Parti vagy Esetszolgálathoz.`,
           {
             timeRule: paired.timeRule,
-            pairingReferences: [{ direction: 'next', address: closing.diagnostic.address }],
+            pairingReferences: closing
+              ? [{ direction: 'next', address: closing.diagnostic.address }]
+              : undefined,
           },
         ),
       );
@@ -340,10 +394,17 @@ export function interpretSchedule(
         paired.event,
         occurrence.entry.kind === 'double' && marker === '5'
           ? 'Az 5 új éjszakai szolgálatot indít; az adott napon 19:00–24:00 szolgálati szakasz.'
-          : `${marker}–7 pár egyetlen szolgálatként felismerve.`,
+          : assumedClosing
+            ? 'A hónap utolsó napi 5 jelölése a következő hónap első napján feltételezett 7-tel lett lezárva.'
+            : `${marker}–7 pár egyetlen szolgálatként felismerve.`,
         {
           timeRule: paired.timeRule,
-          pairingReferences: [{ direction: 'next', address: closing.diagnostic.address }],
+          pairingReferences: closing
+            ? [{ direction: 'next', address: closing.diagnostic.address }]
+            : undefined,
+          technicalNote: assumedClosing
+            ? 'A hónap utolsó napi 5 jelölése a következő hónap első napján feltételezett 7-tel lett lezárva.'
+            : undefined,
         },
       ),
     );
